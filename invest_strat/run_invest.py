@@ -1,0 +1,92 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+sys.path.append('code/lev_stock/invest_strat/')
+import invest_functions as inv
+import visual_functions as vis
+import data_treat_functions as dtf
+
+# Defining variables for the investment strategy:
+
+#################################################
+# Define quantiles and holding period
+quant_dlev = 10
+quant_intan = 3
+quant_lev = 5
+quant_lev_vol = 0
+# intan_strat = 0 # CAREFUL WITH THE GRAPH LEGEND. 1 for spltting between high and low intangible/assets ratio, 0 for splliting according to leverage level   
+double_strat = 0 # 0 for single strategy (either intangibles or leverage level), 1 for double strategy.
+holding_period = 1 # Number of months to hold the portfolio
+window = 60 # Rolling Sharpe ratio window
+window_vol = 12 # Rolling leverage volatility window
+value_weight = 0 # 1 for value-weighted returns, 0 for equal-weighted returns
+#################################################
+
+df = pd.read_feather('data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
+# sp500 = pd.read_excel('data/excel/sp500.xlsx')
+# rf = pd.read_csv('data/csv/TB3MS.csv')
+df_reset = df.reset_index()
+rf = df_reset[['year_month', 'rf']]
+# rf = pd.read_csv('data/csv/.csv')
+
+df = df.reset_index()
+df = (df
+      .rename(columns={'GVKEY': 'gvkey', 'RET': 'ret'})
+      .drop(columns=['RET_lead1'])
+)
+
+#############################################################
+# Buy stocks with low leverage change (quintile 1)
+# and sell stocks with high leverage change (quintile 5)
+# Do this for stocks with high intangible/assets ratio
+# for those with low intangible/assets ratio and compare
+# the results. Rebalance every month and hold for one month
+##############################################################
+
+
+# df.shape
+# df_quant[['gvkey', 'year_month', 'd_debt_at_5', 'intan_at_3', 'debt_at_4']].tail(50)
+df_quant = inv.create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, window_vol)
+# df_lev_vol = dtf.calc_lev_vol(df_port_ret, window_vol)
+
+# df_port = inv.create_portfolios(df_quant, quant_dlev, quant_intan, quant_lev, quant_lev_vol, all_stocks, intan_strat, double_strat)
+df_port = inv.create_portfolios(df_quant, quant_dlev, quant_intan, quant_lev, double_strat)
+
+df_port_ret = inv.weighted_returns(df_port, holding_period, value_weight)
+
+
+df_port_ret_agg = inv.agg_weighted_returns(df_port_ret, holding_period)
+df_port_ret_agg_avr =  inv.avr_port_holding_period(df_port_ret_agg, holding_period)
+df_strat_ret = dtf.calc_avr_portolio(df_port_ret_agg_avr)
+
+###############################
+# Graph the cumulative results
+# and get the Sharpe ratio
+###############################
+
+# df_sp500, fig = vis.plot_returns_mkt(df_strat_ret, sp500, all_stocks)
+df_strat, fig = vis.plot_returns(df_strat_ret, double_strat)
+
+plt.savefig('output/graph/cum_ret_10_perc.pdf', format='pdf',  bbox_inches='tight')
+
+###########################
+# DON'T RUN THIS BLOCK YET
+###########################
+
+df_sharpe = dtf.merge_df_rf(df_strat, rf)
+sharpe_ratio, excess_returns, dates = inv.calculate_annualized_sharpe_ratio(df_sharpe)
+rolling_sharpe_ratio = inv.rolling_sharpe_ratio(excess_returns, window, dates)
+plot_sharpe = vis.plot_sharpe(rolling_sharpe_ratio, double_strat)
+
+
+plt.savefig('output/graph/sr_ret_10_perc.pdf', format='pdf', bbox_inches='tight')
+
+# save = df_strat_ret.to_feather('data/feather/df_strat_ret.feather')
+
+###########################################
+# Calculate the recent leverage volatility
+###########################################
+
+
+
