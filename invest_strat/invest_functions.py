@@ -48,9 +48,9 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
 # df.head(50)
     # Define columns and their corresponding quantile counts and names
     quantile_info = {
-        'd_debt_at_adj': (quant_dlev, f'd_debt_at_{quant_dlev}'),
+        'dlev': (quant_dlev, f'd_debt_at_{quant_dlev}'),
         'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
-        'debt_at_adj': (quant_lev, f'debt_at_{quant_lev}'),
+        'lev': (quant_lev, f'debt_at_{quant_lev}'),
         }
     
     quantile_lev_vol_info = {

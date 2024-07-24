@@ -41,7 +41,7 @@ def merge_comp_intan_epk(df, intan):
         .assign(date = pd.to_datetime(compustat_sel["datadate"], format = '%Y-%m-%d', errors = "coerce")) #non-conforming entries will be coerced to "Not a Time - NaT"
         .assign(year_quarter = lambda x: x['date'].dt.to_period('Q'))
         .drop(columns = ['datadate'])
-        .query('~(sic >= 6000 and sic < 7000) and ~(sic >= 4900 and sic < 5000)')
+        .query('~(sic >= 6000 and sic < 7000) and ~(sic >= 4900 and sic < 5000) and ceqq > 0 and ltq >= 0')
     )
     # compustat_sel_pre_merge.head(50)
 
@@ -72,7 +72,10 @@ def merge_comp_intan_epk(df, intan):
 
     compust_pre_merge = (compust
         .assign(rdq = pd.to_datetime(compust["rdq"], format = '%Y-%m-%d', errors = "coerce")) #non-conforming entries will be coerced to "Not a Time - NaT"
-        .assign(year_month = lambda x: x['rdq'].dt.to_period('M'))
+        .assign(year_month = lambda x: x['date'].dt.to_period('M')) #merging according to the fiscal quarter end, instead of the release date
+        .assign(lev = lambda x: x['ltq'] / x['atq'])
+        .sort_values(by = ['GVKEY', 'date'])
+        .assign(dlev = lambda x: x.groupby('GVKEY')['lev'].diff())
     )
     return compust_pre_merge
 
@@ -164,7 +167,7 @@ def merge_crsp_comp(df, crsp, ff):
     # ccm_monthly_no_dup.head(50)
 
     # ccm_monthly_no_dup.set_index(['GVKEY', 'year_month'], inplace=True)
-    columns_fill = ['atq', 'ceqq', 'dlttq', 'dlcq', 'niq', 'sic', 'state', 'ppentq', 'ltq', 'intan_epk']
+    columns_fill = ['atq', 'ceqq', 'dlttq', 'dlcq', 'niq', 'sic', 'state', 'ppentq', 'ltq', 'intan_epk', 'lev', 'dlev']
 
     # Fill forward the missing values within each group
     ccm_monthly_filled = ccm_monthly_no_dup.copy()
@@ -227,11 +230,11 @@ def prep_fm(df, betas):
     
     df_copy = (df_copy
         .assign(year = df_copy['date_ret'].dt.year)
-        .query('year >= 1980 and ceqq > 0 and (EXCHCD == 1 | EXCHCD == 2 | EXCHCD == 3) and (SHRCD == 10 | SHRCD == 11)')) #and ltq >= 0
+        .query('year >= 1975 and (EXCHCD == 1 | EXCHCD == 2 | EXCHCD == 3) and (SHRCD == 10 | SHRCD == 11)')) #and ltq >= 0
     # df.shape
     df_copy = (pd.merge(df_copy, betas, how = 'left', on = ['GVKEY', 'year_month']))
     df_copy['debt_at'] = (df_copy['dlttq'] + df_copy['dlcq']) / df_copy['atq']
-    df_copy['lev'] = df_copy['ltq'] / df_copy['atq']
+    # df_copy['lev'] = df_copy['ltq'] / df_copy['atq']
     df_copy['intan_pt_at'] = df_copy['intan_pt_filled'] / df_copy['atq']
     df_copy['intan_epk_at'] = df_copy['intan_epk'] / df_copy['atq']
     df_copy['roe'] = df_copy['niq'] / df_copy['ceqq']
@@ -309,6 +312,8 @@ def prep_fm(df, betas):
     df_clean['d_lev'] = df_clean['d_lev'].replace([np.inf, -np.inf], np.nan)
     df_clean['d_ln_lev'] = df_clean['d_ln_lev'].replace([np.inf, -np.inf], np.nan)
     df_clean['d_roe'] = df_clean['d_roe'].replace([np.inf, -np.inf], np.nan)
+    df_clean['dlev'] = df_clean['dlev'].replace([np.inf, -np.inf], np.nan)
+
     
     return df_clean
 

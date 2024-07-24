@@ -5,12 +5,12 @@ import statsmodels.api as sm
 
 def create_sum_stats(df):
     # df_copy = df.copy()
-    df_vars = ['me', 'debt_at', 'd_debt_at', 'bm', 'ln_at']
+    df_vars = ['me', 'lev', 'dlev', 'bm', 'ln_at']
     variable_labels = {
-    #'lev': 'Leverage',
-    #'d_lev': 'Leverage change',
-    'debt_at': 'Leverage',
-    'd_debt_at': 'Leverage change',
+    'lev': 'Leverage',
+    'dlev': 'Leverage change',
+    # 'debt_at': 'Leverage',
+    # 'd_debt_at': 'Leverage change',
     'ln_ceqq': 'Log(equity)',
     'roa': 'Return on Assets',
     'beta': 'Beta',
@@ -61,7 +61,7 @@ def fm_ret_lev(df):
 
     dep_vars = ['RET_lead1', 'ret_2mo_lead1', 'ret_3mo_lead1']
     # dep = df_clean_no_na['ret_2mo_lead1']*100
-    # indep_vars = ['d_lev', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+    indep_vars = ['dlev', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     # indep_vars = ['d_debt_at', 'debt_at', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'lint', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     #indep_vars = ['d_ln_debt_at', 'ln_ceqq', 'roa', 'RET', 'beta']
@@ -70,7 +70,7 @@ def fm_ret_lev(df):
     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'hint']
     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'hint', 'bm']
     # indep_vars = ['d_debt_at', 'ln_ceqq', 'roe', 'RET', 'beta']
-    indep_vars = ['d_debt_at', 'beta', 'ln_me', 'bm', 'roe', 'RET']
+    # indep_vars = ['dlev', 'beta', 'ln_me', 'bm', 'roe', 'RET']
     # indep_vars = ['d_ln_debt_at', 'ln_ceqq', 'roa', 'RET', 'bm']
 
     # Create a dictionary for variable labels
@@ -394,10 +394,11 @@ def create_dlev_intan_port(df):
 
 def create_dlev_lev_port(df, quant_intan):
 
-    df_subsample = df[df['ter_intan_at'] == quant_intan]
+    # df_subsample = df[df['ter_intan_at'] == quant_intan]
+    
     # df.shape
     # df_subsample.shape
-    grouped = df_subsample.groupby(['year_month', 'qui_debt_at', 'qui_d_debt_at'])
+    grouped = df.groupby(['year_month', 'qui_lev', 'qui_dlev'])
     # grouped.head(50)
 
     # Computing the Average Return for Each Group
@@ -405,10 +406,10 @@ def create_dlev_lev_port(df, quant_intan):
 
     monthly_avg_returns.head(50)
     # Compute the Average Across All Months
-    overall_avg_returns = monthly_avg_returns.groupby(['qui_debt_at', 'qui_d_debt_at'])['RET'].mean().reset_index()
+    overall_avg_returns = monthly_avg_returns.groupby(['qui_lev', 'qui_dlev'])['RET'].mean().reset_index()
     # avr_returns_by_qui_debt_at.head(50)
     # pivot_df = overall_avg_returns.pivot(index='qui_d_debt_at', columns='qua_intan', values='ret_3mo_lead1')
-    pivot_df = overall_avg_returns.pivot(index='qui_d_debt_at', columns='qui_debt_at', values='RET')
+    pivot_df = overall_avg_returns.pivot(index='qui_dlev', columns='qui_lev', values='RET')
 
     # Calculate the difference between the first and fifth rows
     difference_row = pivot_df.iloc[0] - pivot_df.iloc[4]
@@ -423,11 +424,11 @@ def create_dlev_lev_port(df, quant_intan):
     # Calculating t-stats
     ######################
 
-    pivot_t_stat = monthly_avg_returns.pivot_table(values='RET', index=['year_month', 'qui_debt_at'], columns='qui_d_debt_at').reset_index()
+    pivot_t_stat = monthly_avg_returns.pivot_table(values='RET', index=['year_month', 'qui_lev'], columns='qui_dlev').reset_index()
     pivot_t_stat.head(50)
     pivot_t_stat['RET_diff'] = pivot_t_stat[1] - pivot_t_stat[5]
-    time_series_diff = pivot_t_stat[['year_month', 'qui_debt_at', 'RET_diff']]
-    time_series_diff = time_series_diff.sort_values(by = ['qui_debt_at', 'year_month'])
+    time_series_diff = pivot_t_stat[['year_month', 'qui_lev', 'RET_diff']]
+    time_series_diff = time_series_diff.sort_values(by = ['qui_lev', 'year_month'])
 
 
     # Function to perform regression on a constant
@@ -443,13 +444,13 @@ def create_dlev_lev_port(df, quant_intan):
 
     # time_series_diff['qui_debt_at'].unique()
     # Loop through each qui_debt_at value and perform the regression
-    for qui_debt_at_value in time_series_diff['qui_debt_at'].unique():
-        df_filtered = time_series_diff[time_series_diff['qui_debt_at'] == qui_debt_at_value]
+    for qui_debt_at_value in time_series_diff['qui_lev'].unique():
+        df_filtered = time_series_diff[time_series_diff['qui_lev'] == qui_debt_at_value]
         model = regress_on_constant(df_filtered)
         regression_results[qui_debt_at_value] = model.summary()
         t_stats.append(model.tvalues[0]) 
 
-    t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff['qui_debt_at'].unique())
+    t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff['qui_lev'].unique())
 
     pivot_df_percent = pivot_df * 100
     pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)

@@ -41,12 +41,20 @@ def create_quantiles(df):
     df_copy['qui_d_debt_at'] = df_copy.groupby('year_month')['d_debt_at_adj'].transform(
         lambda x: pd.qcut(x, 5, labels=[1, 2, 3, 4, 5])
     )
+    
+    df_copy['qui_dlev'] = df_copy.groupby('year_month')['dlev'].transform(
+        lambda x: pd.qcut(x, 5, labels=[1, 2, 3, 4, 5])
+    )
 
     df_copy['qui_intan_at'] = df_copy.groupby('year_month')['intan_epk_at'].transform(
         lambda x: pd.qcut(x, 5, labels=[1, 2, 3, 4, 5])
     )
     
     df_copy['qui_debt_at'] = df_copy.groupby('year_month')['debt_at_adj'].transform(
+    lambda x: pd.qcut(x, 5, labels=[1, 2, 3, 4, 5])
+    )
+    
+    df_copy['qui_lev'] = df_copy.groupby('year_month')['lev'].transform(
     lambda x: pd.qcut(x, 5, labels=[1, 2, 3, 4, 5])
     )
 
