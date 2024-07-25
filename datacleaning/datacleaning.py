@@ -175,7 +175,6 @@ def merge_crsp_comp(df, crsp, ff):
     
     return ccm_monthly_filled
 
-
 def merge_pt(df, pt):
     df_copy = df.copy()
     
@@ -317,7 +316,6 @@ def prep_fm(df, betas):
     
     return df_clean
 
-
 def calc_beta(df):
     df_copy = df.copy()
     
@@ -377,8 +375,7 @@ def calc_beta(df):
     # df_reg.shape
     df_reg_beta = df_reg_beta[['year_month', 'GVKEY', 'beta']]
     return df_reg_beta
-    
-    
+       
 def rolling_regression(df, window_length):
     #df['year_month'] = pd.to_datetime(df['year_month'].astype(str), format='%Y-%m')
     results = []

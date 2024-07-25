@@ -4,26 +4,13 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append('code/lev_stock/invest_strat/')
 import invest_strat as ist
-# get current path:
-import os# Get the current path
-current_path = os.getcwd()
+import utils as ut
+import os
+# Silence warnings
+import warnings
+warnings.filterwarnings("ignore")
 
-# Get the parent directory
-parent_dir = os.path.dirname(current_path)
-
-# Construct the path to the sibling folder "output"
-sibling_folder_path = os.path.join(parent_dir, 'output')
-
-
-# Get the current path
-current_path = os.getcwd()
-
-# Get the parent directory
-parent_dir = os.path.dirname(current_path)
-
-# Construct the path to the sibling folder "output"
-sibling_folder_path = os.path.join(parent_dir, 'output')
-
+figfolder = ut.to_output('graph/')
 # Defining variables for the investment strategy:
 
 #################################################
@@ -72,10 +59,9 @@ df_port = ist.create_portfolios(df_quant, quant_dlev, quant_intan, quant_lev, do
 
 df_port_ret = ist.weighted_returns(df_port, holding_period, value_weight)
 
-
 df_port_ret_agg = ist.agg_weighted_returns(df_port_ret, holding_period)
 df_port_ret_agg_avr =  ist.avr_port_holding_period(df_port_ret_agg, holding_period)
-df_strat_ret = ist.calc_avr_portolio(df_port_ret_agg_avr)
+df_strat_ret = ist.calc_avr_portfolio(df_port_ret_agg_avr)
 
 ###############################
 # Graph the cumulative results
@@ -85,7 +71,7 @@ df_strat_ret = ist.calc_avr_portolio(df_port_ret_agg_avr)
 # df_sp500, fig = ist.plot_returns_mkt(df_strat_ret, sp500, all_stocks)
 df_strat, fig = ist.plot_returns(df_strat_ret, double_strat)
 
-plt.savefig('output/graph/cum_ret_10_perc.pdf', format='pdf',  bbox_inches='tight')
+plt.savefig(figfolder + 'cum_ret_10_perc.pdf', format='pdf',  bbox_inches='tight')
 
 ###########################
 # DON'T RUN THIS BLOCK YET
@@ -97,13 +83,10 @@ rolling_sharpe_ratio = ist.rolling_sharpe_ratio(excess_returns, window, dates)
 plot_sharpe = ist.plot_sharpe(rolling_sharpe_ratio, double_strat)
 
 
-plt.savefig('output/graph/sr_ret_10_perc.pdf', format='pdf', bbox_inches='tight')
-
+plt.savefig(figfolder + 'sr_ret_10_perc.pdf', format='pdf', bbox_inches='tight')
+print("Finished")
 # save = df_strat_ret.to_feather('data/feather/df_strat_ret.feather')
 
 ###########################################
 # Calculate the recent leverage volatility
 ###########################################
-
-
-

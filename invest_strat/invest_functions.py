@@ -13,29 +13,12 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
 
     smallest_non_zero_lev = df_copy.loc[df_copy['debt_at'] > 0, 'debt_at'].min()
     epsilon_lev = np.random.uniform(0, smallest_non_zero_lev * 0.1, size=len(df_copy))
-    
-    # smallest_non_zero_lev_vol = df_copy.loc[df_copy['lev_vol'] > 0, 'lev_vol'].min()
-    # epsilon_lev_vol = np.random.uniform(0, smallest_non_zero_lev_vol * 0.1, size=len(df_copy))
-
 
 ######################################################################
 # Most observations are zero because I calculate monthly change
 # and the Compustat debt is quarterly. See numbers below and explain
 # them in the paper (this is why I create the adjusted variables below)
 ######################################################################
-
-# df.shape # (1889659, 54)
-# zero_count = (df['d_debt_at'] == 0).sum()
-# print(zero_count) # 1369820
-
-# negatives = (df['d_debt_at'] < 0).sum()
-# print(negatives) # 272262
-
-# positives = (df['d_debt_at'] > 0).sum()
-# print(positives) # 221623
-
-# missing_values_count = df['d_debt_at'].isnull().sum()
-# print(missing_values_count) # 25954
 
 # Replace zeros with these small random numbers (otherwise, qcut will not work)
     df_copy['d_debt_at_adj'] = df_copy['d_debt_at']

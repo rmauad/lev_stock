@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 
-def calc_avr_portolio(df):
+def calc_avr_portfolio(df):
 
     df_copy = df.copy()
     # Create a new column 'average_port' by taking the mean across all 'port' columns
