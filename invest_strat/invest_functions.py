@@ -58,63 +58,6 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
         return df_copy
     else:
         return df_copy
-        
-
-# Creating portfolios
-# def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, all_stocks, intan_strat, double_strat):
-#     df_copy = df.copy()
-
-#     # Define the names of the quantile columns based on the input quantile values
-#     quant_dlev_col = f'd_debt_at_{quant_dlev}'
-#     quant_intan_col = f'intan_at_{quant_intan}'
-#     quant_lev_col = f'debt_at_{quant_lev}'
-#     quant_lev_vol_col = f'lev_vol_{quant_lev_vol}'
-    
-#     if double_strat == 0:
-#         if intan_strat == 1:
-#             if all_stocks == 1:
-#                 df_copy['long'] = np.where((df_copy[quant_dlev_col] == 1), 1, 0)
-#                 df_copy['short'] = np.where((df_copy[quant_dlev_col] == quant_dlev), 1, 0)
-        
-#             else:
-#                 if quant_lev_vol == 0:
-#                     df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-#                     df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-#                     df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == 1), 1, 0)
-#                     df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == 1), 1, 0)
-#                 else:
-#                     df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == quant_intan) & (df_copy[quant_lev_vol_col] == quant_lev_vol), 1, 0)
-#                     df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == quant_intan) & (df_copy[quant_lev_vol_col] == quant_lev_vol), 1, 0)
-#                     df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == 1) & (df_copy[quant_lev_vol_col] == 1), 1, 0)
-#                     df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == 1) & (df_copy[quant_lev_vol_col] == 1), 1, 0)
-#         else:
-#             if all_stocks == 1:
-#                 df_copy['long'] = np.where((df_copy[quant_dlev_col] == 1), 1, 0)
-#                 df_copy['short'] = np.where((df_copy[quant_dlev_col] == quant_dlev), 1, 0)
-        
-#             else:
-#                 if quant_lev_vol == 0:
-#                     df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
-#                     df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
-#                     df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == 1), 1, 0)
-#                     df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == 1), 1, 0)
-#                 else:
-#                     # df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_vol_col] == quant_lev_vol), 1, 0)
-#                     # df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_vol_col] == quant_lev_vol), 1, 0)
-#                     # df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == 1), 1, 0)
-#                     # df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == 1), 1, 0)
-#                     df_copy['long_hint'] = np.where((df_copy[quant_lev_vol_col] == 1), 1, 0)
-#                     df_copy['short_hint'] = np.where((df_copy[quant_lev_vol_col] == quant_lev_vol), 1, 0)
-#                     df_copy['long_lint'] = np.where((df_copy[quant_lev_vol_col] == 1), 1, 0)
-#                     df_copy['short_lint'] = np.where((df_copy[quant_lev_vol_col] == quant_lev_vol), 1, 0)
-#     else:
-#                 df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-#                 df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-#                 df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == 1) & (df_copy[quant_intan_col] == 1), 1, 0)
-#                 df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == 1) & (df_copy[quant_intan_col] == 1), 1, 0)        
-        
-        
-#     return df_copy
 
 def create_portfolios(df, quant_dlev, quant_intan, quant_lev, double_strat):
     df_copy = df.copy()

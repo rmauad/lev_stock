@@ -5,6 +5,7 @@ import sys
 sys.path.append('code/lev_stock/invest_strat/')
 import invest_strat as ist
 import utils as ut
+import datacleaning as dc
 import os
 # Silence warnings
 import warnings
@@ -27,10 +28,10 @@ window_vol = 12 # Rolling leverage volatility window
 value_weight = 0 # 1 for value-weighted returns, 0 for equal-weighted returns
 #################################################
 
-df = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
-# sp500 = pd.read_excel('data/excel/sp500.xlsx')
-# rf = pd.read_csv('data/csv/TB3MS.csv')
+df = dc.load_fm(redo = False)
+
 df_reset = df.reset_index()
+
 rf = df_reset[['year_month', 'rf']]
 # rf = pd.read_csv('data/csv/.csv')
 
@@ -47,7 +48,6 @@ df = (df
 # for those with low intangible/assets ratio and compare
 # the results. Rebalance every month and hold for one month
 ##############################################################
-
 
 # df.shape
 # df_quant[['gvkey', 'year_month', 'd_debt_at_5', 'intan_at_3', 'debt_at_4']].tail(50)

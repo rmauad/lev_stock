@@ -4,6 +4,27 @@ import numpy as np
 import statsmodels.api as sm
 from statsmodels.regression.rolling import RollingOLS
 
+def load_fm(df, redo = False):
+    if redo:
+        intan = pd.read_csv('data/csv/int_xsec.csv') # from
+        intan = pd.read_csv('data/csv/int_xsec.csv') # from https://github.com/edwardtkim/intangiblevalue/tree/main/output
+        df = pd.read_csv("data/csv/comp_fundq.csv") # origianl Compustat
+        crsp = pd.read_csv('data/csv/crsp_full.csv') # original CRSP
+        ff = pd.read_csv('data/csv/F-F_Research_Data_Factors.CSV') # from Kenneth French's website
+        pt = pd.read_csv('data/csv/peterstaylor.csv')
+
+        comp_intan = merge_comp_intan_epk(df, intan)
+        cc = merge_crsp_comp(comp_intan, crsp, ff) # also merges with Fama-French factors
+        cc_pt = merge_pt(cc, pt)
+        betas = calc_beta(cc_pt)
+        df_fm = prep_fm(cc_pt, betas)
+
+        df_fm.to_feather('../data/feather/df_fm.feather')
+    else:
+        df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
+
+    return df_fm
+
 def custom_fill(group):
     group['atq'] = group['atq'].interpolate()
     group['capxy'] = group['capxy'].interpolate()
