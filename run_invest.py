@@ -28,7 +28,7 @@ window_vol = 12 # Rolling leverage volatility window
 value_weight = 0 # 1 for value-weighted returns, 0 for equal-weighted returns
 #################################################
 
-df = dc.load_fm(redo = False)
+df = dc.load_fm(redo = True)
 
 df_reset = df.reset_index()
 

@@ -4,14 +4,13 @@ import numpy as np
 import statsmodels.api as sm
 from statsmodels.regression.rolling import RollingOLS
 
-def load_fm(df, redo = False):
+def load_fm(redo = False):
     if redo:
-        intan = pd.read_csv('data/csv/int_xsec.csv') # from
-        intan = pd.read_csv('data/csv/int_xsec.csv') # from https://github.com/edwardtkim/intangiblevalue/tree/main/output
-        df = pd.read_csv("data/csv/comp_fundq.csv") # origianl Compustat
-        crsp = pd.read_csv('data/csv/crsp_full.csv') # original CRSP
-        ff = pd.read_csv('data/csv/F-F_Research_Data_Factors.CSV') # from Kenneth French's website
-        pt = pd.read_csv('data/csv/peterstaylor.csv')
+        intan = pd.read_csv('../data/csv/int_xsec.csv') # from https://github.com/edwardtkim/intangiblevalue/tree/main/output
+        df = pd.read_csv("../data/csv/comp_fundq.csv") # origianl Compustat
+        crsp = pd.read_csv('../data/csv/crsp_full.csv') # original CRSP
+        ff = pd.read_csv('../data/csv/F-F_Research_Data_Factors.CSV') # from Kenneth French's website
+        pt = pd.read_csv('../data/csv/peterstaylor.csv')
 
         comp_intan = merge_comp_intan_epk(df, intan)
         cc = merge_crsp_comp(comp_intan, crsp, ff) # also merges with Fama-French factors
@@ -53,9 +52,6 @@ def merge_comp_intan_epk(df, intan):
                         'gvkey': 'GVKEY'})
     )
 
-    # df_intan_sel.head(50)
-    df_intan_sel_pre_merge.head(50)
-
     df_intan_sel_pre_merge = df_intan_sel_pre_merge.drop(columns = ['datadate', 'date'])
 
     compustat_sel_pre_merge = (compustat_sel
@@ -64,12 +60,7 @@ def merge_comp_intan_epk(df, intan):
         .drop(columns = ['datadate'])
         .query('~(sic >= 6000 and sic < 7000) and ~(sic >= 4900 and sic < 5000) and ceqq > 0 and ltq >= 0')
     )
-    # compustat_sel_pre_merge.head(50)
 
-    # compustat_sel_pre_merge['GVKEY'].nunique()
-    # compustat_sel['GVKEY'].nunique()
-    # compustat_sel_pre_merge = compustat_sel_pre_merge[~compustat_sel_pre_merge.duplicated('GVKEY_year_quarter', keep='first')]
-    #compustat_sel_pre_merge.shape
 
     compust = (pd.merge(compustat_sel_pre_merge, df_intan_sel_pre_merge, how = 'left', on = ['year_quarter', 'GVKEY']))
 
@@ -99,15 +90,6 @@ def merge_comp_intan_epk(df, intan):
         .assign(dlev = lambda x: x.groupby('GVKEY')['lev'].diff())
     )
     return compust_pre_merge
-
-    # compust_pre_merge.columns
-    # compust_pre_merge[compust_pre_merge['GVKEY'] == 180562][['GVKEY', 'date', 'year_quarter', 'rdq', 'year_month', 'intan_epk']].head(50)
-
-    # compust.shape
-    # compust_pre_merge.head(50)
-    # compust_pre_merge.shape
-
-    # compust_pre_merge.to_feather('data/feather/compust_pre_merge.feather')
 
 def merge_crsp_comp(df, crsp, ff):
     df_copy = df.copy()
@@ -180,12 +162,6 @@ def merge_crsp_comp(df, crsp, ff):
     ccm_monthly = (pd.merge(crsp_merge, compust_monthly, how = 'left', on = ['year_month', 'GVKEY']))
     # ccm_monthly.shape
     ccm_monthly_no_dup = ccm_monthly.drop_duplicates(subset=['year_month', 'GVKEY'], keep='first')
-
-    # ccm_monthly_no_dup.shape
-        
-    # ccm_monthly.columns
-    # ccm_monthly.shape
-    # ccm_monthly_no_dup.head(50)
 
     # ccm_monthly_no_dup.set_index(['GVKEY', 'year_month'], inplace=True)
     columns_fill = ['atq', 'ceqq', 'dlttq', 'dlcq', 'niq', 'sic', 'state', 'ppentq', 'ltq', 'intan_epk', 'lev', 'dlev']
