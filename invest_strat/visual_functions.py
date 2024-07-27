@@ -2,6 +2,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from .announce_execution import announce_execution
 
 def plot_returns_mkt(df, sp500, all_stocks):
     plt.rcParams.update({
@@ -166,7 +167,7 @@ def plot_returns_mkt(df, sp500, all_stocks):
     
 #         return df_copy, fig
 
-
+@announce_execution
 def plot_returns(df, double_strat):
     plt.rcParams.update({
         'font.size': 22,           # General font size
@@ -233,8 +234,8 @@ def plot_returns(df, double_strat):
 
 #     return plot_sharpe
 
+@announce_execution
 def plot_sharpe(rolling_sharpe_ratio, double_strat):
-
     plot_sharpe, ax = plt.subplots()
     ax = rolling_sharpe_ratio.plot(x='year_month', y=['strat_ret', 'strat_hlev_ret', 'strat_hint_ret', 'strat_lint_ret'], figsize=(10, 6))
     ax.set_title('Sharpe ratio leverage change investment strategies')

@@ -1,8 +1,9 @@
 # Defines all functions to create the portfolio strategies.
 import pandas as pd
 import numpy as np
+from .announce_execution import announce_execution
 
-
+@announce_execution
 def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, window_vol):
     df_copy = df.copy()
     df_copy['lev_vol'] = df_copy.groupby('gvkey')['debt_at'].transform(lambda x: x.rolling(window_vol).std())
@@ -59,6 +60,7 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
     else:
         return df_copy
 
+@announce_execution
 def create_portfolios(df, quant_dlev, quant_intan, quant_lev, double_strat):
     df_copy = df.copy()
 
@@ -145,6 +147,7 @@ def create_portfolios(df, quant_dlev, quant_intan, quant_lev, double_strat):
     
 #     return df_copy
 
+@announce_execution
 def weighted_returns(df, holding_period, value_weight):
     df_copy = df.copy()
     # Calculate weights
@@ -215,6 +218,7 @@ def weighted_returns(df, holding_period, value_weight):
     
 #     return df_port_ret_agg
 
+@announce_execution
 def agg_weighted_returns(df, holding_period):
     aggregation_dict = {}
     
@@ -264,6 +268,7 @@ def agg_weighted_returns(df, holding_period):
 
 #     return df_port_ret_agg
 
+@announce_execution
 def avr_port_holding_period(df, holding_period):
     df_port_ret_agg = df.copy()
     
@@ -308,6 +313,7 @@ def avr_port_holding_period(df, holding_period):
 #     ret_rf_copy = (mean_excess_return * 12) / (std_excess_return * np.sqrt(12))
 #     return ret_rf_copy, excess_returns, dates
 
+@announce_execution
 def calculate_annualized_sharpe_ratio(ret_rf):
     ret_rf_copy = ret_rf.copy()
     """Calculate the annualized Sharpe ratio for a series of monthly returns."""
@@ -324,7 +330,7 @@ def calculate_annualized_sharpe_ratio(ret_rf):
     ret_rf_copy = (mean_excess_return * 12) / (std_excess_return * np.sqrt(12))
     return ret_rf_copy, excess_returns, dates
 
-
+@announce_execution
 def rolling_sharpe_ratio(excess_returns, window, dates):
     """Calculate the rolling Sharpe ratio for a series of excess returns using a rolling window."""
     # rolling_sharpe = excess_returns.rolling(window=window).apply(

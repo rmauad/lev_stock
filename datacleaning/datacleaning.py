@@ -3,14 +3,61 @@ import sys
 import numpy as np
 import statsmodels.api as sm
 from statsmodels.regression.rolling import RollingOLS
+from invest_strat import announce_execution
+import pickle
 
-def load_fm(redo = False):
+def csv_to_pickle():
+    print("Converting CSV files to pickle files")
+    df = pd.read_csv("../data/csv/comp_fundq.csv") # origianl Compustat
+    compustat_sel = df[['datadate', 'rdq', 'GVKEY', 'sic', 
+                            'atq', 'dlcq', 'dlttq', 'ceqq',
+                            'state', 'niq', 'ltq', 'ppentq']]
+    compustat_sel.to_pickle("../data/pickle/comp_fundq.pkl")
+    print("Converted Compustat")
+    crsp = pd.read_csv('../data/csv/crsp_full.csv') # original CRSP
+    crsp_sel = crsp[['PERMNO', 'date', 'RET', 'PRC', 'SHROUT', 'EXCHCD', 'SHRCD']]
+    crsp_sel.to_pickle("../data/pickle/crsp_full.pkl")
+    print("Converted CRSP")
+    ff = pd.read_csv('../data/csv/F-F_Research_Data_Factors.CSV') # from Kenneth French's website
+    ff.to_pickle("../data/pickle/F-F_Research_Data_Factors.pkl")
+    print("Converted Fama-French factors")
+    pt = pd.read_csv('../data/csv/peterstaylor.csv')
+    pt.to_pickle("../data/pickle/peterstaylor.pkl")
+    print("Converted Peters and Taylor intangible capital data")
+    intan = pd.read_csv('../data/csv/int_xsec.csv') # from
+    intan.to_pickle("../data/pickle/int_xsec.pkl")
+    print("Converted intangible capital data")
+
+
+@announce_execution
+def load_fm(redo = False, origin = "pickle"):
     if redo:
-        intan = pd.read_csv('../data/csv/int_xsec.csv') # from https://github.com/edwardtkim/intangiblevalue/tree/main/output
-        df = pd.read_csv("../data/csv/comp_fundq.csv") # origianl Compustat
-        crsp = pd.read_csv('../data/csv/crsp_full.csv') # original CRSP
-        ff = pd.read_csv('../data/csv/F-F_Research_Data_Factors.CSV') # from Kenneth French's website
-        pt = pd.read_csv('../data/csv/peterstaylor.csv')
+        if origin == 'csv':
+            print("Reading from CSV files")
+            print("Reading intangible capital data")
+            intan = pd.read_csv('../data/csv/int_xsec.csv') # from https://github.com/edwardtkim/intangiblevalue/tree/main/output
+            print("Reading original Compustat and CRSP data")
+            df = pd.read_csv("../data/csv/comp_fundq.csv") # origianl Compustat
+            print("Reading CRSP data")
+            crsp = pd.read_csv('../data/csv/crsp_full.csv') # original CRSP
+            print("Reading Fama-French factors")
+            ff = pd.read_csv('../data/csv/F-F_Research_Data_Factors.CSV') # from Kenneth French's website
+            print("Reading Peters and Taylor intangible capital data")
+            pt = pd.read_csv('../data/csv/peterstaylor.csv')
+        elif origin == 'pickle' or origin == 'pkl':
+            print("Reading from pickle files")
+            print("Reading intangible capital data")
+            intan = pd.read_pickle('../data/pickle/int_xsec.pkl')
+            print("Reading original Compustat and CRSP data")
+            df = pd.read_pickle("../data/pickle/comp_fundq.pkl")
+            print("Reading CRSP data")
+            crsp = pd.read_pickle('../data/pickle/crsp_full.pkl')
+            print("Reading Fama-French factors")
+            ff = pd.read_pickle('../data/pickle/F-F_Research_Data_Factors.pkl')
+            print("Reading Peters and Taylor intangible capital data")
+            pt = pd.read_pickle('../data/pickle/peterstaylor.pkl')
+        else:
+            raise ValueError("Invalid origin. Please use 'csv' or 'pickle' as origin.")
 
         comp_intan = merge_comp_intan_epk(df, intan)
         cc = merge_crsp_comp(comp_intan, crsp, ff) # also merges with Fama-French factors
@@ -34,6 +81,7 @@ def custom_fill(group):
     group['state'] = group['state'].ffill()
     return group
 
+@announce_execution
 def merge_comp_intan_epk(df, intan):
     
     ###################################################################################
@@ -91,6 +139,7 @@ def merge_comp_intan_epk(df, intan):
     )
     return compust_pre_merge
 
+@announce_execution
 def merge_crsp_comp(df, crsp, ff):
     df_copy = df.copy()
     # mkt_rf = ff[['date', 'Mkt-RF']]
@@ -100,7 +149,7 @@ def merge_crsp_comp(df, crsp, ff):
             .rename(columns = {'Mkt-RF': 'mkt_rf', 'SMB': 'smb', 'HML': 'hml', 'RF': 'rf'})
             .drop(columns = ['date']))
 
-    link_permno_gvkey = pd.read_csv('data/csv/link_permno_gvkey.csv')
+    link_permno_gvkey = pd.read_csv('../data/csv/link_permno_gvkey.csv')
     link_permno_gvkey = link_permno_gvkey.loc[:,['GVKEY', 'LPERMNO']]
     link_permno_gvkey_unique = link_permno_gvkey.drop_duplicates()
     link_permno_gvkey_renamed = link_permno_gvkey_unique.rename(columns={'LPERMNO': 'PERMNO'})
@@ -172,6 +221,7 @@ def merge_crsp_comp(df, crsp, ff):
     
     return ccm_monthly_filled
 
+@announce_execution
 def merge_pt(df, pt):
     df_copy = df.copy()
     
@@ -221,6 +271,7 @@ def merge_pt(df, pt):
     # df_intan[['GVKEY', 'date_ret', 'date_compustat_filled', 'intan_pt', 'intan_pt_filled']][df_intan['GVKEY'] == 11217].tail(50)  
     return df_intan_pt
 
+@announce_execution
 def prep_fm(df, betas):
     df_copy = df.copy()
     
@@ -313,6 +364,7 @@ def prep_fm(df, betas):
     
     return df_clean
 
+@announce_execution
 def calc_beta(df):
     df_copy = df.copy()
     

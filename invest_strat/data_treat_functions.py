@@ -1,7 +1,9 @@
 # Defines all functions to create the portfolio strategies.
 import pandas as pd
 import numpy as np
+from .announce_execution import announce_execution
 
+@announce_execution
 def calc_avr_portfolio(df):
 
     df_copy = df.copy()
@@ -39,7 +41,7 @@ def calc_avr_portfolio(df):
 #     ret_rf = pd.merge(returns, rf_annual, on = 'year_month', how = 'left')
 
 #     return ret_rf
-
+@announce_execution
 def merge_df_rf(df, rf):
     df_copy = df.copy()
     df_copy = df_copy.reset_index()
