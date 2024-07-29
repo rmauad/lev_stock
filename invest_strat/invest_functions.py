@@ -6,7 +6,7 @@ from .announce_execution import announce_execution
 @announce_execution
 def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, window_vol):
     df_copy = df.copy()
-    df_copy['lev_vol'] = df_copy.groupby('gvkey')['debt_at'].transform(lambda x: x.rolling(window_vol).std())
+    # df_copy['lev_vol'] = df_copy.groupby('gvkey')['debt_at'].transform(lambda x: x.rolling(window_vol).std())
 
     np.random.seed(42)
     smallest_non_zero = df_copy.loc[df_copy['d_debt_at'] > 0, 'd_debt_at'].min()
@@ -24,7 +24,7 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
 # Replace zeros with these small random numbers (otherwise, qcut will not work)
     df_copy['d_debt_at_adj'] = df_copy['d_debt_at']
     df_copy['debt_at_adj'] = df_copy['debt_at']
-    df_copy['lev_vol_adj'] = df_copy['lev_vol']
+    # df_copy['lev_vol_adj'] = df_copy['lev_vol']
     df_copy.loc[df_copy['d_debt_at'] == 0, 'd_debt_at_adj'] = epsilon[df_copy['d_debt_at'] == 0]
     df_copy.loc[df_copy['debt_at'] == 0, 'debt_at_adj'] = epsilon_lev[df_copy['debt_at'] == 0]
     # df_copy.loc[df_copy['lev_vol'] == 0, 'lev_vol_adj'] = epsilon_lev_vol[df_copy['lev_vol'] == 0]
@@ -32,14 +32,14 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
 # df.head(50)
     # Define columns and their corresponding quantile counts and names
     quantile_info = {
-        'dlev': (quant_dlev, f'd_debt_at_{quant_dlev}'),
+        'dlev': (quant_dlev, f'dlev_{quant_dlev}'),
         'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
-        'lev': (quant_lev, f'debt_at_{quant_lev}'),
+        'lev': (quant_lev, f'lev_{quant_lev}'),
         }
     
-    quantile_lev_vol_info = {
-        'lev_vol': (quant_lev_vol, f'lev_vol_{quant_lev_vol}')
-    }
+    # quantile_lev_vol_info = {
+    #     'lev_vol': (quant_lev_vol, f'lev_vol_{quant_lev_vol}')
+    # }
 
     # Create quantiles based on the provided inputs
     for column, (quant_count, quant_name) in quantile_info.items():
@@ -65,9 +65,9 @@ def create_portfolios(df, quant_dlev, quant_intan, quant_lev, double_strat):
     df_copy = df.copy()
 
     # Define the names of the quantile columns based on the input quantile values
-    quant_dlev_col = f'd_debt_at_{quant_dlev}'
+    quant_dlev_col = f'dlev_{quant_dlev}'
     quant_intan_col = f'intan_at_{quant_intan}'
-    quant_lev_col = f'debt_at_{quant_lev}'
+    quant_lev_col = f'lev_{quant_lev}'
     # quant_lev_vol_col = f'lev_vol_{quant_lev_vol}'
       
     df_copy['long'] = np.where((df_copy[quant_dlev_col] == 1), 1, 0)

@@ -361,7 +361,6 @@ def prep_fm(df, betas):
     df_clean['d_roe'] = df_clean['d_roe'].replace([np.inf, -np.inf], np.nan)
     df_clean['dlev'] = df_clean['dlev'].replace([np.inf, -np.inf], np.nan)
 
-    
     return df_clean
 
 @announce_execution

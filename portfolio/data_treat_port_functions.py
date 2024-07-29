@@ -2,19 +2,31 @@ import pandas as pd
 import numpy as np
 
 
-def create_intan_dummy(df):
+def create_intan_dummy(df, quant_intan):
     df_copy = df.copy()
-    df_copy['ter_intan_at'] = df_copy.groupby('year_month')['intan_epk_at'].transform(
-        lambda x: pd.qcut(x, 3, labels=[1, 2, 3])
-    )
-
-    df_copy = df_copy.assign(hint = df_copy['ter_intan_at'] == 3)
-    df_copy = df_copy.assign(lint = df_copy['ter_intan_at'] == 1)
-    df_copy['dummyXd_debt_at'] = df_copy['d_debt_at'] * df_copy['hint']
+    
+    quantile_info = {
+    'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
+    }
+    
+    # Create quantiles based on the provided inputs
+    for column, (quant_count, quant_name) in quantile_info.items():
+        df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
+            lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1))
+        )
+        
+    # df_copy['ter_intan_at'] = df_copy.groupby('year_month')['intan_epk_at'].transform(
+    #     lambda x: pd.qcut(x, 3, labels=[1, 2, 3])
+    # )
+    quant_intan_col = f'intan_at_{quant_intan}'
+    
+    df_copy['hint'] = np.where((df_copy[quant_intan_col] == quant_intan), 1, 0)
+    df_copy['lint'] = np.where((df_copy[quant_intan_col] == 1), 1, 0)
+    df_copy['dummyXdlev'] = df_copy['dlev'] * df_copy['hint']
 
     return df_copy
 
-def create_quantiles(df):
+def create_quantiles(df, quant_dlev, quant_lev, quant_intan):
     df_copy = df.copy()
     #################################################################################
     # To generate quintiles of leverage change by month, 
@@ -37,7 +49,28 @@ def create_quantiles(df):
     df_copy.loc[df_copy['debt_at'] == 0, 'debt_at_adj'] = epsilon_lev[df_copy['debt_at'] == 0]
 
     # df.head(50)
-
+    quantile_info = {
+    'lev': (quant_lev, f'lev_{quant_lev}'),    
+    'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
+    'dlev': (quant_dlev, f'dlev_{quant_dlev}'),
+    }
+    
+    # Create quantiles based on the provided inputs
+    for column, (quant_count, quant_name) in quantile_info.items():
+        df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
+            lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1))
+        )
+        
+    # df_copy['ter_intan_at'] = df_copy.groupby('year_month')['intan_epk_at'].transform(
+    #     lambda x: pd.qcut(x, 3, labels=[1, 2, 3])
+    # )
+    quant_intan_col = f'intan_at_{quant_intan}'
+    
+    df_copy['hint'] = np.where((df_copy[quant_intan_col] == quant_intan), 1, 0)
+    df_copy['lint'] = np.where((df_copy[quant_intan_col] == 1), 1, 0)
+    df_copy['dummyXdlev'] = df_copy['dlev'] * df_copy['hint']
+    
+    
     df_copy['qui_d_debt_at'] = df_copy.groupby('year_month')['d_debt_at_adj'].transform(
         lambda x: pd.qcut(x, 5, labels=[1, 2, 3, 4, 5])
     )
