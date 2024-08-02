@@ -58,10 +58,14 @@ def fm_ret_lev(df):
     ###################################
     # Running Fama MacBeth regressions
     ###################################
-
+    # df_copy['quant_intan_dummy'] = df_copy['intan_at_5'] == 5
+    # df_copy['dlevXintan_quant'] = df_copy['dlev'] * df_copy['quant_intan_dummy']
+    df_copy['indust_dummy'] = df_copy['ff_indust'] == 10
+    df_copy['dlevXindust_dummy'] = df_copy['dlev'] * df_copy['indust_dummy']
+    
     dep_vars = ['RET_lead1', 'ret_2mo_lead1', 'ret_3mo_lead1']
     # dep = df_clean_no_na['ret_2mo_lead1']*100
-    indep_vars = ['dlev', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+    indep_vars = ['dlev', 'dlevXindust_dummy', 'indust_dummy', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     # indep_vars = ['d_debt_at', 'debt_at', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'lint', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     #indep_vars = ['d_ln_debt_at', 'ln_ceqq', 'roa', 'RET', 'beta']
@@ -216,8 +220,22 @@ def create_dlev_intan_port(df, quant_dlev, quant_intan):
 
     grouped = df_copy.groupby(['year_month', quant_intan_col, quant_dlev_col])
 
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df_copy.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_intan_col, quant_dlev_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_intan_col, quant_dlev_col])
+
     # Computing the Average Return for Each Group
-    monthly_avg_returns = grouped['RET'].mean().reset_index()
+    monthly_avg_returns = filtered_grouped['RET'].mean().reset_index()
 
     # monthly_avg_returns.head(50)
     # Compute the Average Across All Months
@@ -338,14 +356,29 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, intan_subsample
     quant_lev_col = f'lev_{quant_lev}'
 
     df_subsample = df[df[quant_intan_col] == intan_subsample]
-    
+    # df_subsample = df
+
     # df.shape
     # df_subsample.shape
     grouped = df_subsample.groupby(['year_month', quant_lev_col, quant_dlev_col])
     # grouped.head(50)
 
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df_subsample.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_lev_col, quant_dlev_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_lev_col, quant_dlev_col])
+    
     # Computing the Average Return for Each Group
-    monthly_avg_returns = grouped['RET'].mean().reset_index()
+    monthly_avg_returns = filtered_grouped['RET'].mean().reset_index()
 
     monthly_avg_returns.head(50)
     # Compute the Average Across All Months

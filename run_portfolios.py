@@ -12,6 +12,12 @@ import invest_strat as ist
 # df = pd.read_feather('data/feather/df_fm.feather') # from prep_fm.py
 df = dc.load_fm(redo = False)
 
+# df = df.reset_index()
+# df = (df
+#       .rename(columns={'GVKEY': 'gvkey'}))
+#     #   .drop(columns=['RET_lead1'])
+# df.set_index(['gvkey', 'year_month'], inplace=True)
+
 #######################################
 quant_dlev = 5
 quant_intan = 5

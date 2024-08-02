@@ -1,6 +1,8 @@
 import pandas as pd
 import sys
 import numpy as np
+from scipy.optimize import fsolve
+from scipy.stats import norm
 import statsmodels.api as sm
 from statsmodels.regression.rolling import RollingOLS
 from invest_strat import announce_execution
@@ -64,6 +66,7 @@ def load_fm(redo = False, origin = "pickle"):
         cc_pt = merge_pt(cc, pt)
         betas = calc_beta(cc_pt)
         df_fm = prep_fm(cc_pt, betas)
+        df_fm = merton(df_fm)
 
         df_fm.to_feather('../data/feather/df_fm.feather')
     else:
@@ -71,15 +74,15 @@ def load_fm(redo = False, origin = "pickle"):
 
     return df_fm
 
-def custom_fill(group):
-    group['atq'] = group['atq'].interpolate()
-    group['capxy'] = group['capxy'].interpolate()
-    group['cash_at'] = group['cash_at'].interpolate()
-    group['debt_at'] = group['debt_at'].interpolate()
-    group['org_cap_comp'] = group['org_cap_comp'].interpolate()
-    group['ppentq'] = group['ppentq'].interpolate()
-    group['state'] = group['state'].ffill()
-    return group
+# def custom_fill(group):
+#     group['atq'] = group['atq'].interpolate()
+#     group['capxy'] = group['capxy'].interpolate()
+#     group['cash_at'] = group['cash_at'].interpolate()
+#     group['debt_at'] = group['debt_at'].interpolate()
+#     group['org_cap_comp'] = group['org_cap_comp'].interpolate()
+#     group['ppentq'] = group['ppentq'].interpolate()
+#     group['state'] = group['state'].ffill()
+#     return group
 
 @announce_execution
 def merge_comp_intan_epk(df, intan):
@@ -213,12 +216,14 @@ def merge_crsp_comp(df, crsp, ff):
     ccm_monthly_no_dup = ccm_monthly.drop_duplicates(subset=['year_month', 'GVKEY'], keep='first')
 
     # ccm_monthly_no_dup.set_index(['GVKEY', 'year_month'], inplace=True)
-    columns_fill = ['atq', 'ceqq', 'dlttq', 'dlcq', 'niq', 'sic', 'state', 'ppentq', 'ltq', 'intan_epk', 'lev', 'dlev']
+    columns_fill = ['atq', 'ceqq', 'dlttq', 'dlcq', 'niq', 'sic', 'state', 'ppentq', 'ltq', 'lev', 'dlev']
+    col_intan_fill = ['intan_epk']
 
     # Fill forward the missing values within each group
     ccm_monthly_filled = ccm_monthly_no_dup.copy()
-    ccm_monthly_filled[columns_fill] = ccm_monthly_filled.groupby('GVKEY')[columns_fill].transform(lambda x: x.ffill())
-    
+    ccm_monthly_filled[columns_fill] = ccm_monthly_filled.groupby('GVKEY')[columns_fill].transform(lambda x: x.ffill(limit = 2))
+    ccm_monthly_filled[col_intan_fill] = ccm_monthly_filled.groupby('GVKEY')[col_intan_fill].transform(lambda x: x.ffill(limit = 11))
+
     return ccm_monthly_filled
 
 @announce_execution
@@ -274,10 +279,11 @@ def merge_pt(df, pt):
 @announce_execution
 def prep_fm(df, betas):
     df_copy = df.copy()
+    df_copy = ff_indust(df_copy)
     
     df_copy = (df_copy
         .assign(year = df_copy['date_ret'].dt.year)
-        .query('year >= 1975 and (EXCHCD == 1 | EXCHCD == 2 | EXCHCD == 3) and (SHRCD == 10 | SHRCD == 11)')) #and ltq >= 0
+        .query('year >= 1975 and (EXCHCD == 1 | EXCHCD == 2 | EXCHCD == 3) and (SHRCD == 10 | SHRCD == 11)')) #already filtered ceqq > 0 and ltq >= 0 in merge_comp_intan_epk
     # df.shape
     df_copy = (pd.merge(df_copy, betas, how = 'left', on = ['GVKEY', 'year_month']))
     df_copy['debt_at'] = (df_copy['dlttq'] + df_copy['dlcq']) / df_copy['atq']
@@ -338,6 +344,7 @@ def prep_fm(df, betas):
     # df_new[['hint', 'quart_intan']][df_new['quart_intan'] == 4].tail(50)
     # df_int = df_new.query('hint == True')
 
+    df_new['ret_lag1'] = df_new.groupby('GVKEY')['RET'].shift(1)
     df_new['RET_lead1'] = df_new.groupby('GVKEY')['RET'].shift(-1)
     df_new['debt_at_lag1'] = df_new.groupby('GVKEY')['debt_at'].shift(1)
     df_new['d_debt_at'] = df_new['debt_at'] - df_new['debt_at_lag1']
@@ -362,6 +369,118 @@ def prep_fm(df, betas):
     df_clean['dlev'] = df_clean['dlev'].replace([np.inf, -np.inf], np.nan)
 
     return df_clean
+
+# def equations(vars, E, D, sigma_E, r, T):
+#     V, sigma_V = vars
+#     d1 = (np.log(V / D) + (r + 0.5 * sigma_V ** 2) * T) / (sigma_V * np.sqrt(T))
+#     d2 = d1 - sigma_V * np.sqrt(T)
+#     eq1 = E - V * norm.cdf(d1) + D * np.exp(-r * T) * norm.cdf(d2)
+#     eq2 = sigma_E - sigma_V * V * norm.cdf(d1) / E
+#     return [eq1, eq2]
+
+# # Function to calculate default probability
+# def merton(df):
+# # def merton(E, D, sigma_E, r, T):
+    
+#     E = df['me'] # market value of equity
+#     D = df['ltq'] # Total liabilities (debt)
+#     sigma_E = df['me'].std() # Volatility of equity (how do I calculate this?)
+#     sigma_E_annual = sigma_E * np.sqrt(12)
+#     V0 = E + D  # Initial guess for asset value
+#     sigma_V0 = sigma_E_annual * E / (E + D)  # Initial guess for asset volatility
+#     V, sigma_V = fsolve(equations, (V0, sigma_V0), args=(E, D, sigma_E_annual, r, T))
+#     d1 = (np.log(V / D) + (r + 0.5 * sigma_V ** 2) * T) / (sigma_V * np.sqrt(T))
+#     d2 = d1 - sigma_V * np.sqrt(T)
+#     return norm.cdf(-d2)
+    
+    
+def ff_indust(df):
+    df['ff_indust'] = np.nan
+
+# Consumer Nondurables
+    df.loc[((df['sic'] >= 100) & (df['sic'] <= 999)) |
+           ((df['sic'] >= 2000) & (df['sic'] <= 2399)) |
+           ((df['sic'] >= 2700) & (df['sic'] <= 2749)) |
+           ((df['sic'] >= 2770) & (df['sic'] <= 2799)) |
+           ((df['sic'] >= 3100) & (df['sic'] <= 3199)) |
+           ((df['sic'] >= 3940) & (df['sic'] <= 3989)), 'ff_indust'] = 1
+    
+    # Consumer Durables
+    df.loc[((df['sic'] >= 2500) & (df['sic'] <= 2519)) |
+           ((df['sic'] >= 2590) & (df['sic'] <= 2599)) |
+           ((df['sic'] >= 3630) & (df['sic'] <= 3659)) |
+           ((df['sic'] >= 3710) & (df['sic'] <= 3711)) |
+           ((df['sic'] == 3714)) |
+           ((df['sic'] == 3716)) |
+           ((df['sic'] >= 3750) & (df['sic'] <= 3751)) |
+           ((df['sic'] == 3792)) |
+           ((df['sic'] >= 3900) & (df['sic'] <= 3939)) |
+           ((df['sic'] >= 3990) & (df['sic'] <= 3999)), 'ff_indust'] = 2
+    
+    # Manufacturing
+    df.loc[((df['sic'] >= 2520) & (df['sic'] <= 2589)) |
+           ((df['sic'] >= 2600) & (df['sic'] <= 2699)) |
+           ((df['sic'] >= 2750) & (df['sic'] <= 2769)) |
+           ((df['sic'] >= 3000) & (df['sic'] <= 3099)) |
+           ((df['sic'] >= 3200) & (df['sic'] <= 3569)) |
+           ((df['sic'] >= 3580) & (df['sic'] <= 3629)) |
+           ((df['sic'] >= 3700) & (df['sic'] <= 3709)) |
+           ((df['sic'] >= 3712) & (df['sic'] <= 3713)) |
+           ((df['sic'] == 3715)) |
+           ((df['sic'] >= 3717) & (df['sic'] <= 3749)) |
+           ((df['sic'] >= 3752) & (df['sic'] <= 3791)) |
+           ((df['sic'] >= 3793) & (df['sic'] <= 3799)) |
+           ((df['sic'] >= 3830) & (df['sic'] <= 3839)) |
+           ((df['sic'] >= 3860) & (df['sic'] <= 3899)), 'ff_indust'] = 3
+    
+    # Oil, Gas, and Coal Extraction and Products
+    df.loc[((df['sic'] >= 1200) & (df['sic'] <= 1399)) |
+           ((df['sic'] >= 2900) & (df['sic'] <= 2999)), 'ff_indust'] = 4
+    
+    # Chemicals and Allied Products
+    df.loc[((df['sic'] >= 2800) & (df['sic'] <= 2829)) |
+           ((df['sic'] >= 2840) & (df['sic'] <= 2899)), 'ff_indust'] = 5
+    
+    # Business Equipment
+    df.loc[((df['sic'] >= 3570) & (df['sic'] <= 3579)) |
+           ((df['sic'] >= 3660) & (df['sic'] <= 3692)) |
+           ((df['sic'] >= 3694) & (df['sic'] <= 3699)) |
+           ((df['sic'] >= 3810) & (df['sic'] <= 3829)) |
+           ((df['sic'] >= 7370) & (df['sic'] <= 7379)), 'ff_indust'] = 6
+    
+    # Telephone and Television Transmission
+    df.loc[((df['sic'] >= 4800) & (df['sic'] <= 4899)), 'ff_indust'] = 7
+    
+    # Utilities
+    df.loc[((df['sic'] >= 4900) & (df['sic'] <= 4949)), 'ff_indust'] = 8
+    
+    # Wholesale, Retail, and Some Services
+    df.loc[((df['sic'] >= 5000) & (df['sic'] <= 5999)) |
+           ((df['sic'] >= 7200) & (df['sic'] <= 7299)) |
+           ((df['sic'] >= 7600) & (df['sic'] <= 7699)), 'ff_indust'] = 9
+    
+    # Healthcare, Medical Equipment, and Drugs
+    df.loc[((df['sic'] >= 2830) & (df['sic'] <= 2839)) |
+           ((df['sic'] == 3693)) |
+           ((df['sic'] >= 3840) & (df['sic'] <= 3859)) |
+           ((df['sic'] >= 8000) & (df['sic'] <= 8099)), 'ff_indust'] = 10
+    
+    # Finance
+    df.loc[((df['sic'] >= 6000) & (df['sic'] <= 6999)), 'ff_indust'] = 11
+    
+    # Other
+    df.loc[((df['sic'] >= 1000) & (df['sic'] <= 1399)) |
+           ((df['sic'] >= 1400) & (df['sic'] <= 1999)) |
+           ((df['sic'] >= 4000) & (df['sic'] <= 4799)) |
+           ((df['sic'] >= 7000) & (df['sic'] <= 7199)) |
+           ((df['sic'] >= 7300) & (df['sic'] <= 7399)) |
+           ((df['sic'] >= 7500) & (df['sic'] <= 7599)) |
+           ((df['sic'] >= 7700) & (df['sic'] <= 8999)) |
+           ((df['sic'] >= 9100) & (df['sic'] <= 9999)), 'ff_indust'] = 12
+    
+    return df
+
+
 
 @announce_execution
 def calc_beta(df):

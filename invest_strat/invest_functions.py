@@ -6,6 +6,7 @@ from .announce_execution import announce_execution
 @announce_execution
 def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, window_vol):
     df_copy = df.copy()
+    df_copy = df_copy[(df_copy['dlev'].notna()) & (df_copy['lev'].notna()) & (df_copy['intan_epk_at'].notna())]
     # df_copy['lev_vol'] = df_copy.groupby('gvkey')['debt_at'].transform(lambda x: x.rolling(window_vol).std())
 
     np.random.seed(42)
@@ -37,10 +38,30 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
         'lev': (quant_lev, f'lev_{quant_lev}'),
         }
     
+    quantile_dlev_info = {
+        'dlev': (quant_dlev, f'dlev_{quant_dlev}')
+        }
+    
     # quantile_lev_vol_info = {
     #     'lev_vol': (quant_lev_vol, f'lev_vol_{quant_lev_vol}')
     # }
 
+    # #######################################
+    # # Dealing with missing values (in dlev)
+    # #######################################
+    
+    # df_non_missing = df_copy[df_copy['dlev'].notna()]
+    
+    # for column, (quant_count, quant_name) in quantile_dlev_info.items():
+    #     df_non_missing[quant_name] = df_non_missing.groupby('year_month')[column].transform(
+    #         lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1))
+    #     )
+        
+    # quant_dlev_col = f'dlev_{quant_dlev}'
+    
+    # # Merge the quantile labels back into the original DataFrame
+    # df_copy = df_copy.merge(df_non_missing[['gvkey', 'year_month', quant_dlev_col]], on=['gvkey', 'year_month'], how='left')
+        
     # Create quantiles based on the provided inputs
     for column, (quant_count, quant_name) in quantile_info.items():
         df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
@@ -181,10 +202,9 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy['long_weight_lint'] = df_copy['long_lint'] / df_copy.groupby('year_month')['long_lint'].transform('sum')
         df_copy['short_weight_lint'] = df_copy['short_lint'] / df_copy.groupby('year_month')['short_lint'].transform('sum')
 
-    # Calculate weighted returns
     for period in range(1, holding_period + 1):
         ret_col = f'ret_lead{period}'
-        df_copy[ret_col] = df_copy.groupby('gvkey')['ret'].shift(-period)
+        df_copy[ret_col] = df_copy.groupby('gvkey')['ret'].shift(-3) # strategy starts 3 months after quarter-end date
         weighted_ret_col = f'weighted_strat_return_lead{period}'
         weighted_ret_col_hlev = f'weighted_strat_return_hlev_lead{period}'
         weighted_ret_col_hint = f'weighted_strat_return_hint_lead{period}'

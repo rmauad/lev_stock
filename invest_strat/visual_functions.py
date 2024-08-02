@@ -30,6 +30,8 @@ def plot_returns_mkt(df, sp500, all_stocks):
         sp500_long = sp500_long.drop(['Year', 'Month'], axis=1)
         sp500_long = sp500_long.sort_values('year_month')
         sp500_long.head(50)
+        
+        sp500_long.to_excel('sp500_long.xlsx', index = False)
     
         df_sp500 = df_copy.merge(sp500_long, on='year_month', how='inner')
         df_sp500 = (df_sp500
@@ -211,7 +213,7 @@ def plot_returns(df, double_strat):
                     loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
     else:
         ax.legend(['All stocks', 'High leverage level', 'High leverage level and high intangible/assets', 'High leverage level and low intangible/assets'],
-                    loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
+                    loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)
     
     fig.tight_layout()  # Automatically adjust layout to fit within figure area
 
@@ -248,7 +250,7 @@ def plot_sharpe(rolling_sharpe_ratio, double_strat):
                 loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
     else:
         ax.legend(['SR all stocks', 'SR high leverage level', 'SR high leverage level and high intangible/assets', 'SR high leverage level and low intangible/assets'],
-                loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)        
+                loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)        
     
     plot_sharpe.tight_layout()  # Automatically adjust layout to fit within figure area
 
