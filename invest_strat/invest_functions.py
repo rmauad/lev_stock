@@ -4,9 +4,12 @@ import numpy as np
 from .announce_execution import announce_execution
 
 @announce_execution
-def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, window_vol):
+def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_lev_vol, window_vol):
     df_copy = df.copy()
-    df_copy = df_copy[(df_copy['dlev'].notna()) & (df_copy['lev'].notna()) & (df_copy['intan_epk_at'].notna())]
+    # df_copy = df_copy[(df_copy['dlev'].notna()) & (df_copy['lev'].notna()) & (df_copy['intan_epk_at'].notna()) & (df_copy['KKR'].notna())]
+    # df_copy = df_copy[(df_copy['dlev'].notna()) & (df_copy['lev'].notna()) & (df_copy['intan_epk_at'].notna())]
+    df_copy = df_copy[(df_copy['intan_epk_at'].notna())]
+
     # df_copy['lev_vol'] = df_copy.groupby('gvkey')['debt_at'].transform(lambda x: x.rolling(window_vol).std())
 
     np.random.seed(42)
@@ -36,6 +39,7 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
         'dlev': (quant_dlev, f'dlev_{quant_dlev}'),
         'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
         'lev': (quant_lev, f'lev_{quant_lev}'),
+        # 'KKR': (quant_kkr, f'kkr_{quant_kkr}')
         }
     
     quantile_dlev_info = {
@@ -65,8 +69,13 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
     # Create quantiles based on the provided inputs
     for column, (quant_count, quant_name) in quantile_info.items():
         df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
-            lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1))
-        )
+            lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1)) if len(x) >= quant_count else pd.Series([None]*len(x))
+            )
+        
+    # for column, (quant_count, quant_name) in quantile_info.items():
+    #     df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
+    #         lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1))
+    #         )
     
     if quant_lev_vol > 0:
         # df_copy['lev_vol_1'] = df_copy.groupby('year_month')['lev_vol'].transform(
@@ -82,13 +91,14 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, wind
         return df_copy
 
 @announce_execution
-def create_portfolios(df, quant_dlev, quant_intan, quant_lev, double_strat):
+def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, double_strat, intan_measure):
     df_copy = df.copy()
 
     # Define the names of the quantile columns based on the input quantile values
     quant_dlev_col = f'dlev_{quant_dlev}'
     quant_intan_col = f'intan_at_{quant_intan}'
     quant_lev_col = f'lev_{quant_lev}'
+    quant_kkr_col = f'kkr_{quant_kkr}'
     # quant_lev_vol_col = f'lev_vol_{quant_lev_vol}'
       
     df_copy['long'] = np.where((df_copy[quant_dlev_col] == 1), 1, 0)
@@ -97,17 +107,31 @@ def create_portfolios(df, quant_dlev, quant_intan, quant_lev, double_strat):
     df_copy['long_hlev'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
     df_copy['short_hlev'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
     
-    if double_strat == 0:
-        df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-        df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-        df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == 1), 1, 0)
-        df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == 1), 1, 0)
-        
+    if intan_measure == 'epk':
+        if double_strat == 0:
+            df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
+            df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
+            df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_intan_col] == 1), 1, 0)
+            df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_intan_col] == 1), 1, 0)
+            
+        else:
+            df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
+            df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
+            df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == 1), 1, 0)
+            df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == 1), 1, 0)
     else:
-        df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-        df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == quant_intan), 1, 0)
-        df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == 1), 1, 0)
-        df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_intan_col] == 1), 1, 0)
+        
+        if double_strat == 0:
+            df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_kkr_col] == quant_kkr), 1, 0)
+            df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_kkr_col] == quant_kkr), 1, 0)
+            df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_kkr_col] == 1), 1, 0)
+            df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_kkr_col] == 1), 1, 0)
+            
+        else:
+            df_copy['long_hint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_kkr_col] == quant_kkr), 1, 0)
+            df_copy['short_hint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_kkr_col] == quant_kkr), 1, 0)
+            df_copy['long_lint'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_kkr_col] == 1), 1, 0)
+            df_copy['short_lint'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev) & (df_copy[quant_kkr_col] == 1), 1, 0)
         
     return df_copy
 

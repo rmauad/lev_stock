@@ -60,12 +60,15 @@ def fm_ret_lev(df):
     ###################################
     # df_copy['quant_intan_dummy'] = df_copy['intan_at_5'] == 5
     # df_copy['dlevXintan_quant'] = df_copy['dlev'] * df_copy['quant_intan_dummy']
-    df_copy['indust_dummy'] = df_copy['ff_indust'] == 10
-    df_copy['dlevXindust_dummy'] = df_copy['dlev'] * df_copy['indust_dummy']
+    # df_copy['indust_dummy'] = df_copy['ff_indust'] == 10
+    # df_copy['dlevXindust_dummy'] = df_copy['dlev'] * df_copy['indust_dummy']
     
     dep_vars = ['RET_lead1', 'ret_2mo_lead1', 'ret_3mo_lead1']
     # dep = df_clean_no_na['ret_2mo_lead1']*100
-    indep_vars = ['dlev', 'dlevXindust_dummy', 'indust_dummy', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+    # indep_vars = ['dlev', 'dlevXindust_dummy', 'indust_dummy', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+    
+    indep_vars = ['dlev', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+    
     # indep_vars = ['d_debt_at', 'debt_at', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'lint', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     #indep_vars = ['d_ln_debt_at', 'ln_ceqq', 'roa', 'RET', 'beta']

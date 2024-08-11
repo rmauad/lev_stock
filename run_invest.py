@@ -21,6 +21,7 @@ quant_dlev = 10
 quant_intan = 5
 quant_lev = 5
 quant_lev_vol = 0
+quant_kkr = 5
 # intan_strat = 0 # CAREFUL WITH THE GRAPH LEGEND. 1 for spltting between high and low intangible/assets ratio, 0 for splliting according to leverage level   
 double_strat = 0 # 0 for single strategy (either intangibles or leverage level), 1 for double strategy.
 # months_to_strat = 3 # Number of months after quarter-end date apply the strategy
@@ -28,21 +29,34 @@ holding_period = 1 # Number of months to hold the portfolio
 window = 60 # Rolling Sharpe ratio window
 window_vol = 12 # Rolling leverage volatility window
 value_weight = 0 # 1 for value-weighted returns, 0 for equal-weighted returns
+intan_measure = 'epk' # 'kkr' for KKR intangibles, 'epk' for Eisfeldt-Papanikolaou intangibles
 #################################################
 
 # dc.csv_to_pickle() # Run this line to convert the csv files to pickle files
 
 df = dc.load_fm(redo = False)
+
 # sp500 = pd.read_excel('../data/excel/sp500.xlsx')
 # df = df.sample(n = 1000)
-df = df.reset_index()
+
+# kkr = pd.read_pickle('../data/pickle/kkr.pkl')
+# kkr = (kkr
+#       .assign(GVKEY = kkr['gvkey'].astype('Int64'))
+#       )
+# kkr = kkr[['GVKEY', 'year', 'KKR']]
+# df = df.sort_values(by=['GVKEY', 'year_month'])
+# col_intan_fill = ['KKR']
+
+# # df_test = (pd.merge(df, kkr, how = 'left', on = ['GVKEY', 'year']))
+# df[col_intan_fill] = df.groupby('GVKEY')[col_intan_fill].transform(lambda x: x.ffill(limit = 11))
+
 
 ############################
 # Trials for the Merton Model
 #############################
 
 # df = df[(df['year'] <= 2012)]
-# # df['me_lag1'] = df.groupby('GVKEY')['me'].shift(1)
+# df['me_lag1'] = df.groupby('GVKEY')['me'].shift(1)
 # df['ret_me'] = df.groupby('GVKEY')['me'].pct_change()
 # df['sigma_E'] = df.groupby('GVKEY')['RET'].std()
 # df['sigma_E_annual'] = df['sigma_E'] * np.sqrt(12)
@@ -64,7 +78,7 @@ df = (df
       .rename(columns={'GVKEY': 'gvkey', 'RET': 'ret'})
       .drop(columns=['RET_lead1'])
 )
-df = df[df['ff_indust'] == 3]
+# df = df[df['ff_indust'] == 3]
 # #############################################################
 # # Buy stocks with low leverage change (quintile 1)
 # # and sell stocks with high leverage change (quintile 5)
@@ -75,11 +89,11 @@ df = df[df['ff_indust'] == 3]
 
 # df.shape
 # df_quant[['gvkey', 'year_month', 'd_debt_at_5', 'intan_at_3', 'debt_at_4']].tail(50)
-df_quant = ist.create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_lev_vol, window_vol)
+df_quant = ist.create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_lev_vol, window_vol)
 # df_lev_vol = ist.calc_lev_vol(df_port_ret, window_vol)
 
 # df_port = ist.create_portfolios(df_quant, quant_dlev, quant_intan, quant_lev, quant_lev_vol, all_stocks, intan_strat, double_strat)
-df_port = ist.create_portfolios(df_quant, quant_dlev, quant_intan, quant_lev, double_strat)
+df_port = ist.create_portfolios(df_quant, quant_dlev, quant_intan, quant_lev, quant_kkr, double_strat, intan_measure)
 
 df_port_ret = ist.weighted_returns(df_port, holding_period, value_weight)
 

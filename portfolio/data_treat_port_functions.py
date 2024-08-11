@@ -33,6 +33,8 @@ def create_quantiles(df, quant_dlev, quant_lev, quant_intan):
     # I need to deal with the zeros (otherwise, I get "Bin edges must be unique" error)
     # Solution: replace zeros with the smallest non-zero value - espilon
     #################################################################################
+    df_copy = df_copy[(df_copy['intan_epk_at'].notna())]
+
     np.random.seed(42)
     smallest_non_zero = df_copy.loc[df_copy['d_debt_at'] > 0, 'd_debt_at'].min()
     print(smallest_non_zero)
@@ -52,7 +54,7 @@ def create_quantiles(df, quant_dlev, quant_lev, quant_intan):
     quantile_info = {
     'lev': (quant_lev, f'lev_{quant_lev}'),    
     'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
-    'dlev': (quant_dlev, f'dlev_{quant_dlev}'),
+    'dlev': (quant_dlev, f'dlev_{quant_dlev}')
     }
     
     # Create quantiles based on the provided inputs

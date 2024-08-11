@@ -29,6 +29,9 @@ def csv_to_pickle():
     intan = pd.read_csv('../data/csv/int_xsec.csv') # from
     intan.to_pickle("../data/pickle/int_xsec.pkl")
     print("Converted intangible capital data")
+    kkr = pd.read_csv('../data/csv/kkr.csv') # from
+    kkr.to_pickle("../data/pickle/kkr.pkl")
+    print("Converted knowledge capital risk data")
 
 
 @announce_execution
@@ -58,6 +61,8 @@ def load_fm(redo = False, origin = "pickle"):
             ff = pd.read_pickle('../data/pickle/F-F_Research_Data_Factors.pkl')
             print("Reading Peters and Taylor intangible capital data")
             pt = pd.read_pickle('../data/pickle/peterstaylor.pkl')
+            print("Reading knowledge capital risk data")
+            kkr = pd.read_pickle('../data/pickle/kkr.pkl')
         else:
             raise ValueError("Invalid origin. Please use 'csv' or 'pickle' as origin.")
 
@@ -65,13 +70,20 @@ def load_fm(redo = False, origin = "pickle"):
         cc = merge_crsp_comp(comp_intan, crsp, ff) # also merges with Fama-French factors
         cc_pt = merge_pt(cc, pt)
         betas = calc_beta(cc_pt)
-        df_fm = prep_fm(cc_pt, betas)
-        df_fm = merton(df_fm)
+        df_fm = prep_fm(cc_pt, betas, kkr)
+        df_fm = df_fm.reset_index()
+        df_fm = compute_default_probabilities(df_fm, progress_interval=1000)
 
         df_fm.to_feather('../data/feather/df_fm.feather')
     else:
         df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
-
+        # Pick the firm and period chosen by Doshi et al (2019) as a sample (only one firm, 2 years)
+        # GVKEY = 12141, year = 2000 and 2001
+        # df_fm = df_fm.reset_index()
+        # df_fm_sample = df_fm[(df_fm['GVKEY'] == 12141) & (df_fm['year'] >= 2000) & (df_fm['year'] <= 2001)]
+        # df_fm_sample = df_fm.sample(frac = 0.01, random_state = 42)
+        # df_new = compute_default_probabilities(df_fm, progress_interval=1000)
+        
     return df_fm
 
 # def custom_fill(group):
@@ -277,7 +289,7 @@ def merge_pt(df, pt):
     return df_intan_pt
 
 @announce_execution
-def prep_fm(df, betas):
+def prep_fm(df, betas, kkr):
     df_copy = df.copy()
     df_copy = ff_indust(df_copy)
     
@@ -286,6 +298,14 @@ def prep_fm(df, betas):
         .query('year >= 1975 and (EXCHCD == 1 | EXCHCD == 2 | EXCHCD == 3) and (SHRCD == 10 | SHRCD == 11)')) #already filtered ceqq > 0 and ltq >= 0 in merge_comp_intan_epk
     # df.shape
     df_copy = (pd.merge(df_copy, betas, how = 'left', on = ['GVKEY', 'year_month']))
+    kkr = (kkr
+           .assign(GVKEY = kkr['gvkey'].astype('Int64'))
+           )
+    kkr = kkr[['GVKEY', 'year', 'KKR']]
+    df_copy = (pd.merge(df_copy, kkr, how = 'left', on = ['GVKEY', 'year']))
+    df_copy = df_copy.sort_values(by=['GVKEY', 'year_month'])
+    col_intan_fill = ['KKR']
+    df_copy[col_intan_fill] = df_copy.groupby('GVKEY')[col_intan_fill].transform(lambda x: x.ffill(limit = 11))
     df_copy['debt_at'] = (df_copy['dlttq'] + df_copy['dlcq']) / df_copy['atq']
     # df_copy['lev'] = df_copy['ltq'] / df_copy['atq']
     df_copy['intan_pt_at'] = df_copy['intan_pt_filled'] / df_copy['atq']
@@ -370,29 +390,223 @@ def prep_fm(df, betas):
 
     return df_clean
 
-# def equations(vars, E, D, sigma_E, r, T):
-#     V, sigma_V = vars
-#     d1 = (np.log(V / D) + (r + 0.5 * sigma_V ** 2) * T) / (sigma_V * np.sqrt(T))
-#     d2 = d1 - sigma_V * np.sqrt(T)
-#     eq1 = E - V * norm.cdf(d1) + D * np.exp(-r * T) * norm.cdf(d2)
-#     eq2 = sigma_E - sigma_V * V * norm.cdf(d1) / E
-#     return [eq1, eq2]
+# def merton_model(me, sigma_e, debt, rf, time_horizon):
+#     """
+#     Implement the Merton (1974) model to compute default probability.
+#     """
+#     me = max(me, 1e-6)
+#     sigma_e = max(sigma_e, 1e-6)
+#     debt = max(debt, 1e-6)
 
-# # Function to calculate default probability
-# def merton(df):
-# # def merton(E, D, sigma_E, r, T):
+#     asset_value = me + debt
+#     asset_volatility = sigma_e * me / asset_value
+
+#     for i in range(100):
+#         d1 = (np.log(asset_value / debt) + (rf + 0.5 * asset_volatility**2) * time_horizon) / (asset_volatility * np.sqrt(time_horizon))
+#         d2 = d1 - asset_volatility * np.sqrt(time_horizon)
+        
+#         new_asset_value = me + debt * np.exp(-rf * time_horizon) * norm.cdf(d2)
+#         new_asset_volatility = sigma_e * me / (new_asset_value * norm.cdf(d1))
+        
+#         if abs(new_asset_value - asset_value) < 1e-6 and abs(new_asset_volatility - asset_volatility) < 1e-6:
+#             break
+        
+#         asset_value = new_asset_value
+#         asset_volatility = new_asset_volatility
+
+#     distance_to_default = d2
+#     default_probability = norm.cdf(-distance_to_default)
+
+#     return default_probability, distance_to_default
+
+def merton_model(me, sigma_e, debt, rf, time_horizon, max_iterations=200, tolerance=1e-4):
+    """
+    Implement the Merton (1974) model to compute default probability with improved convergence.
+    """
+    # Ensure positive values
+    me = me*1000 # convert to millions
+    me = max(me, 1e-6)
+    sigma_e = max(sigma_e, 1e-6)
+    debt = max(debt, 1e-6)
+
+    # Improved initial guess
+    asset_value = me + debt
+    asset_volatility = sigma_e * (me / asset_value)
+
+    for i in range(max_iterations):
+        d1 = (np.log(asset_value / debt) + (rf + 0.5 * asset_volatility**2) * time_horizon) / (asset_volatility * np.sqrt(time_horizon))
+        d2 = d1 - (asset_volatility * np.sqrt(time_horizon))
+        
+        new_asset_value = (me + debt * np.exp(-rf * time_horizon) * norm.cdf(d2))/norm.cdf(d1)
+        new_asset_volatility = sigma_e * me / (new_asset_value * norm.cdf(d1))
+        
+        # Prevent extreme values
+        # new_asset_value = np.clip(new_asset_value, me, me + debt * 10)
+        # new_asset_volatility = np.clip(new_asset_volatility, sigma_e * 0.1, sigma_e * 10)
+        
+        # Check for convergence using relative tolerance
+        if (abs(new_asset_value - asset_value) < tolerance * asset_value and 
+            abs(new_asset_volatility - asset_volatility) < tolerance * asset_volatility):
+            break
+        
+        asset_value = new_asset_value
+        asset_volatility = new_asset_volatility
     
-#     E = df['me'] # market value of equity
-#     D = df['ltq'] # Total liabilities (debt)
-#     sigma_E = df['me'].std() # Volatility of equity (how do I calculate this?)
-#     sigma_E_annual = sigma_E * np.sqrt(12)
-#     V0 = E + D  # Initial guess for asset value
-#     sigma_V0 = sigma_E_annual * E / (E + D)  # Initial guess for asset volatility
-#     V, sigma_V = fsolve(equations, (V0, sigma_V0), args=(E, D, sigma_E_annual, r, T))
-#     d1 = (np.log(V / D) + (r + 0.5 * sigma_V ** 2) * T) / (sigma_V * np.sqrt(T))
-#     d2 = d1 - sigma_V * np.sqrt(T)
-#     return norm.cdf(-d2)
+    # Compute final values even if max iterations reached
+    d2 = (np.log(asset_value / debt) + (rf - 0.5 * asset_volatility**2) * time_horizon) / (asset_volatility * np.sqrt(time_horizon))
+    distance_to_default = d2
+    default_probability = norm.cdf(-distance_to_default)
+
+    # Return results along with convergence status
+    converged = i < max_iterations - 1
+    return default_probability, distance_to_default, converged
+
+def compute_equity_volatility(group, window=12):
+    group['sigma_e'] = group['RET'].rolling(window=window).std() * np.sqrt(12)
+    # group['sigma_e'] = group['RET'].std() * np.sqrt(12)
+    return group
+
+def apply_merton(row):
+    if pd.isna(row['sigma_e']):
+        return pd.Series({'default_probability': np.nan, 'distance_to_default': np.nan, 'converged': False})
+    default_probability, distance_to_default, converged = merton_model(
+        row['me'],
+        row['sigma_e'],
+        row['ltq'],
+        row['rf'],
+        # row['atq'],
+        time_horizon=40.56
+    )
+    return pd.Series({'default_probability': default_probability, 'distance_to_default': distance_to_default, 'converged': converged})
+
+def compute_default_probabilities(df, progress_interval=1000):
+    df_copy = df.copy()
+    # df_copy = df_copy.reset_index()
+    df_copy = df_copy.sort_values(['GVKEY', 'year_month'])
+
+    # Compute equity volatility for each firm
+    print("Computing equity volatility...")
+    grouped = df_copy.groupby('GVKEY')
+    df_copy = grouped.apply(compute_equity_volatility)
+
+    print("Applying Merton model...")
+    total_rows = len(df_copy)
+    results = []
+    non_converged = 0
     
+    for count, (_, row) in enumerate(df_copy.iterrows(), 1):
+        result = apply_merton(row)
+        results.append(result)
+        
+        if not result['converged']:
+            non_converged += 1
+        
+        if count % progress_interval == 0:
+            conv_rate = (count - non_converged) / count * 100
+            print(f"Processed {count} / {total_rows} observations ({count / total_rows * 100:.2f}%)")
+            print(f"Convergence rate: {conv_rate:.2f}%")
+    
+    df_copy[['default_probability', 'distance_to_default', 'converged']] = pd.DataFrame(results, index=df_copy.index)
+
+    print("Computation complete!")
+    print(f"Overall convergence rate: {(total_rows - non_converged) / total_rows * 100:.2f}%")
+    return df_copy
+
+# def merton_model_improved(me, sigma_e, debt, rf, time_horizon, max_iterations=100, tolerance=1e-6):
+#     # print(f"Input parameters: me={me}, sigma_e={sigma_e}, debt={debt}, rf={rf}, time_horizon={time_horizon}")
+    
+#     # Ensure positive values
+#     me = max(me, 1e-6)
+#     sigma_e = max(sigma_e, 1e-6)
+#     debt = max(debt, 1e-6)
+
+#     # Initial guess
+#     asset_value = me + debt
+#     asset_volatility = sigma_e * me / asset_value
+
+#     for i in range(max_iterations):
+#         try:
+#             d1 = (np.log(asset_value / debt) + (rf + 0.5 * asset_volatility**2) * time_horizon) / (asset_volatility * np.sqrt(time_horizon))
+#             d2 = d1 - asset_volatility * np.sqrt(time_horizon)
+            
+#             new_asset_value = me + debt * np.exp(-rf * time_horizon) * norm.cdf(d2)
+#             new_asset_volatility = sigma_e * me / (new_asset_value * norm.cdf(d1))
+            
+#             # Bound the new values
+#             new_asset_value = np.clip(new_asset_value, me, me + debt * 10)
+#             new_asset_volatility = np.clip(new_asset_volatility, sigma_e * 0.1, sigma_e * 10)
+            
+#             # print(f"Iteration {i+1}")
+#             # print(f"Asset Value: {asset_value:.6f} -> {new_asset_value:.6f}")
+#             # print(f"Asset Volatility: {asset_volatility:.6f} -> {new_asset_volatility:.6f}")
+            
+#             if (abs(new_asset_value - asset_value) < tolerance * asset_value and 
+#                 abs(new_asset_volatility - asset_volatility) < tolerance * asset_volatility):
+#                 # print("Convergence reached!")
+#                 break
+            
+#             asset_value = new_asset_value
+#             asset_volatility = new_asset_volatility
+
+#         except Exception as e:
+#             print(f"Error in iteration {i+1}: {str(e)}")
+#             return np.nan, np.nan
+    
+#     else:
+#         print(f"Warning: Maximum iterations ({max_iterations}) reached without convergence")
+
+#     d2 = (np.log(asset_value / debt) + (rf - 0.5 * asset_volatility**2) * time_horizon) / (asset_volatility * np.sqrt(time_horizon))
+#     distance_to_default = d2
+#     default_probability = norm.cdf(-distance_to_default)
+
+#     # print(f"Final results: default_probability={default_probability:.6f}, distance_to_default={distance_to_default:.6f}")
+#     return default_probability, distance_to_default
+
+# def compute_equity_volatility(group, window=12):
+#     group['sigma_e'] = group['RET'].rolling(window=window).std() * np.sqrt(12)
+#     return group
+
+# def apply_merton(row):
+#     if pd.isna(row['sigma_e']):
+#         return pd.Series({'default_probability': np.nan, 'distance_to_default': np.nan})
+#     default_probability, distance_to_default = merton_model_improved(
+#         row['me'],
+#         row['sigma_e'],
+#         row['ltq'],
+#         row['rf'],
+#         time_horizon=1/12
+#     )
+#     return pd.Series({'default_probability': default_probability, 'distance_to_default': distance_to_default})
+
+# def compute_default_probabilities(df, progress_interval=1000):
+#     df_copy = df.copy()
+#     df_copy = df_copy.reset_index()
+#     df_copy = df_copy.sort_values(['GVKEY', 'year_month'])
+
+#     # Compute equity volatility for each firm
+#     print("Computing equity volatility...")
+#     grouped = df_copy.groupby('GVKEY')
+#     df_copy = grouped.apply(compute_equity_volatility)
+
+#     # Apply Merton model with progress tracking
+#     print("Applying Merton model...")
+#     total_rows = len(df_copy)
+#     results = []
+    
+#     for count, (_, row) in enumerate(df_copy.iterrows(), 1):
+#         result = apply_merton(row)
+#         results.append(result)
+        
+#         if count % progress_interval == 0:
+#             print(f"Processed {count} / {total_rows} observations ({count / total_rows * 100:.2f}%)")
+    
+#     df_copy[['default_probability', 'distance_to_default']] = pd.DataFrame(results, index=df_copy.index)
+
+#     print("Computation complete!")
+#     return df_copy
+
+
+
     
 def ff_indust(df):
     df['ff_indust'] = np.nan
