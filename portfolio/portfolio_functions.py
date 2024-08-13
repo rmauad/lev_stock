@@ -351,7 +351,116 @@ def create_dlev_intan_port(df, quant_dlev, quant_intan):
 
     # print(latex_table)
 
+def create_dlev_pd_port(df, quant_dlev, quant_pd):
+    df_copy = df.copy()
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    quant_pd_col = f'pd_{quant_pd}'
 
+    grouped = df_copy.groupby(['year_month', quant_pd_col, quant_dlev_col])
+
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df_copy.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_pd_col, quant_dlev_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_pd_col, quant_dlev_col])
+
+    # Computing the Average Return for Each Group
+    monthly_avg_returns = filtered_grouped['RET'].mean().reset_index()
+
+    # monthly_avg_returns.head(50)
+    # Compute the Average Across All Months
+    overall_avg_returns = monthly_avg_returns.groupby([quant_pd_col, quant_dlev_col])['RET'].mean().reset_index()
+    # avr_returns_by_qui_debt_at.head(50)
+    # pivot_df = overall_avg_returns.pivot(index='qui_d_debt_at', columns='qua_intan', values='ret_3mo_lead1')
+    pivot_df = overall_avg_returns.pivot(index = quant_dlev_col, columns = quant_pd_col, values='RET')
+
+    # Calculate the difference between the first and fifth rows
+    difference_row = pivot_df.iloc[0] - pivot_df.iloc[quant_dlev-1]
+    difference_row.name = '1-{quant_dlev} Difference'
+
+    # Step 7: Append the difference row to the pivoted DataFrame
+    pivot_df = pivot_df._append(difference_row)
+
+    print(pivot_df)
+
+    ######################
+    # Calculating t-stats
+    ######################
+
+    pivot_t_stat = monthly_avg_returns.pivot_table(values='RET', index=['year_month', quant_pd_col], columns = quant_dlev_col).reset_index()
+    pivot_t_stat.head(50)
+    pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
+    time_series_diff = pivot_t_stat[['year_month', quant_pd_col, 'ret_diff']]
+    time_series_diff = time_series_diff.sort_values(by = [quant_pd_col, 'year_month'])
+
+    # Dictionary to store regression results
+    regression_results = {}
+    t_stats = []
+
+    # time_series_diff['qui_debt_at'].unique()
+    # Loop through each qui_debt_at value and perform the regression
+    for quant_pd_value in time_series_diff[quant_pd_col].unique():
+        df_filtered = time_series_diff[time_series_diff[quant_pd_col] == quant_pd_value]
+        model = regress_on_constant(df_filtered)
+        regression_results[quant_pd_value] = model.summary()
+        t_stats.append(model.tvalues[0]) 
+
+    t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_pd_col].unique())
+
+    pivot_df_percent = pivot_df * 100
+    pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
+    print(pivot_df_with_t_stats)
+
+    ##############
+    # Latex table
+    ##############
+    
+    # Extract the last row (t-stats) and the rows with coefficients
+    t_stats_row = pivot_df_with_t_stats.iloc[-1]
+    avr_rows = pivot_df_with_t_stats.iloc[:-1]
+
+    # Add stars to t-stats
+    t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
+
+    # Generate LaTeX table string
+    num_cols = quant_pd
+    # num_rows = quant_dlev
+
+    # Create the column specification for the tabular environment
+    col_spec = "c" * (num_cols + 1)
+    latex_table = f"\\begin{'tabular'}{{{col_spec}}}\n"
+    latex_table += "\\toprule\n"
+
+    # Create header row
+    header = "quant\\_pd & " + " & ".join(map(str, range(1, num_cols + 1))) + " \\\\\n"
+    latex_table += header
+    latex_table += "\\midrule\n"
+
+    # Create data rows
+    for _, row in avr_rows.iterrows():
+        quant_dlev_rows = row.name
+        coeffs = [f"{row[col]:.2f}" for col in avr_rows.columns]
+        latex_table += f"{quant_dlev_rows} & " + " & ".join(coeffs) + " \\\\\n"
+
+    latex_table += "\\midrule\n"
+
+    # Add t-statistics row (assuming `t_stats_with_stars` has the same length as the number of columns)
+    t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " \\\\\n"
+    latex_table += t_stats_row
+
+    latex_table += "\\bottomrule\n"
+    latex_table += "\\end{tabular}"
+
+    print(latex_table)
+    
 
 def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, intan_subsample):
     quant_dlev_col = f'dlev_{quant_dlev}'
@@ -502,3 +611,120 @@ def regress_on_constant(df):
     X = sm.add_constant(pd.Series([1]*len(df), index=df.index))  # Add a constant term (array of ones) with the same index as df
     model = sm.OLS(df['ret_diff'], X).fit()
     return model
+
+
+def create_dlev_pd_intan_port(df, quant_dlev, quant_intan, quant_pd, intan_subsample):
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    quant_intan_col = f'intan_at_{quant_intan}'
+    quant_pd_col = f'pd_{quant_pd}'
+
+    df_subsample = df[df[quant_intan_col] == intan_subsample]
+    # df_subsample = df
+
+    # df.shape
+    # df_subsample.shape
+    grouped = df_subsample.groupby(['year_month', quant_pd_col, quant_dlev_col])
+    # grouped.head(50)
+
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df_subsample.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_pd_col, quant_dlev_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_pd_col, quant_dlev_col])
+    
+    # Computing the Average Return for Each Group
+    monthly_avg_returns = filtered_grouped['RET'].mean().reset_index()
+
+    monthly_avg_returns.head(50)
+    # Compute the Average Across All Months
+    overall_avg_returns = monthly_avg_returns.groupby([quant_pd_col, quant_dlev_col])['RET'].mean().reset_index()
+    # avr_returns_by_qui_debt_at.head(50)
+    # pivot_df = overall_avg_returns.pivot(index='qui_d_debt_at', columns='qua_intan', values='ret_3mo_lead1')
+    pivot_df = overall_avg_returns.pivot(index = quant_dlev_col, columns = quant_pd_col, values='RET')
+
+    # Calculate the difference between the first and fifth rows
+    difference_row = pivot_df.iloc[0] - pivot_df.iloc[quant_dlev - 1]
+    difference_row.name = '1-{quant_dlev} Difference'
+
+    # Step 7: Append the difference row to the pivoted DataFrame
+    pivot_df = pivot_df._append(difference_row)
+
+    print(pivot_df)
+
+    ######################
+    # Calculating t-stats
+    ######################
+
+    pivot_t_stat = monthly_avg_returns.pivot_table(values='RET', index=['year_month', quant_pd_col], columns = quant_dlev_col).reset_index()
+    pivot_t_stat.head(50)
+    pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
+    time_series_diff = pivot_t_stat[['year_month', quant_pd_col, 'ret_diff']]
+    time_series_diff = time_series_diff.sort_values(by = [quant_pd_col, 'year_month'])
+
+    # Dictionary to store regression results
+    regression_results = {}
+    t_stats = []
+
+    # time_series_diff['qui_debt_at'].unique()
+    # Loop through each qui_debt_at value and perform the regression
+    for quant_pd_value in time_series_diff[quant_pd_col].unique():
+        df_filtered = time_series_diff[time_series_diff[quant_pd_col] == quant_pd_value]
+        model = regress_on_constant(df_filtered)
+        # regression_results[quant_pd_value] = model.summary()
+        t_stats.append(model.tvalues[0]) 
+
+    t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_pd_col].unique())
+
+    pivot_df_percent = pivot_df * 100
+    pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
+    print(pivot_df_with_t_stats)
+
+    ##############
+    # Latex table
+    ##############
+
+    # Extract the last row (t-stats) and the rows with coefficients
+    t_stats_row = pivot_df_with_t_stats.iloc[-1]
+    avr_rows = pivot_df_with_t_stats.iloc[:-1]
+
+    # Add stars to t-stats
+    t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
+
+    # Generate LaTeX table string
+    num_cols = quant_pd
+    # num_rows = quant_dlev
+
+    # Create the column specification for the tabular environment
+    col_spec = "c" * (num_cols + 1)
+    latex_table = f"\\begin{'tabular'}{{{col_spec}}}\n"
+    latex_table += "\\toprule\n"
+
+    # Create header row
+    header = "quant\\_pd & " + " & ".join(map(str, range(1, num_cols + 1))) + " \\\\\n"
+    latex_table += header
+    latex_table += "\\midrule\n"
+
+    # Create data rows
+    for _, row in avr_rows.iterrows():
+        quant_dlev_rows = row.name
+        coeffs = [f"{row[col]:.2f}" for col in avr_rows.columns]
+        latex_table += f"{quant_dlev_rows} & " + " & ".join(coeffs) + " \\\\\n"
+
+    latex_table += "\\midrule\n"
+
+    # Add t-statistics row (assuming `t_stats_with_stars` has the same length as the number of columns)
+    t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " \\\\\n"
+    latex_table += t_stats_row
+
+    latex_table += "\\bottomrule\n"
+    latex_table += "\\end{tabular}"
+
+    print(latex_table)

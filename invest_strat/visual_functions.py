@@ -4,6 +4,38 @@ import numpy as np
 import matplotlib.pyplot as plt
 from .announce_execution import announce_execution
 
+
+def plot_intan_pd(df):
+    plt.rcParams.update({
+    'font.size': 22,           # General font size
+    'axes.titlesize': 24,      # Title font size
+    'axes.labelsize': 18,      # Axis label font size
+    'xtick.labelsize': 18,     # X-tick label font size
+    'ytick.labelsize': 18,     # Y-tick label font size
+    'legend.fontsize': 18,     # Legend font size
+    'figure.titlesize': 24     # Figure title font size
+    })
+
+
+    df_copy = df.copy()
+    df_copy = (df_copy
+                .assign(intan_at_avr = df_copy.groupby('year_month')['intan_epk_at'].transform('mean'))
+                .assign(pd_at_avr = df_copy.groupby('year_month')['default_probability'].transform('mean'))
+                )
+    df_copy = df_copy.reset_index()
+    df_avg = df_copy.drop_duplicates(subset=['year_month'])
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(df_avg['intan_at_avr'], df_avg['pd_at_avr'])
+    ax.set_title('Intangible/Assets and Probability of Default')
+    ax.set_xlabel('Intangible/Assets')
+    ax.set_ylabel('Probability of Default (Merton Model)')
+    ax.grid(True)
+    
+    fig.tight_layout()  # Automatically adjust layout to fit within figure area
+
+    return fig
+
 def plot_returns_mkt(df, sp500, all_stocks):
     plt.rcParams.update({
         'font.size': 22,           # General font size
@@ -185,7 +217,8 @@ def plot_returns(df, double_strat):
     df_copy = df.copy()
     df_copy = (df_copy
                 .assign(strat_ret_cum = (1 + df_copy['strat_ret']).cumprod())
-                .assign(strat_ret_hlev_cum = (1 + df_copy['strat_hlev_ret']).cumprod())               
+                .assign(strat_ret_hlev_cum = (1 + df_copy['strat_hlev_ret']).cumprod())
+                # .assign(strat_ret_hpd_cum = (1 + df_copy['strat_hpd_ret']).cumprod())               
                 .assign(strat_ret_hint_cum = (1 + df_copy['strat_hint_ret']).cumprod())
                 .assign(strat_ret_lint_cum = (1 + df_copy['strat_lint_ret']).cumprod())
                 )
@@ -193,6 +226,7 @@ def plot_returns(df, double_strat):
 # Normalize cumulative returns such that they start at 1
     df_copy['strat_ret_cum_norm'] = df_copy['strat_ret_cum'] / df_copy['strat_ret_cum'].iloc[1]
     df_copy['strat_ret_hlev_cum_norm'] = df_copy['strat_ret_hlev_cum'] / df_copy['strat_ret_hlev_cum'].iloc[1]
+    # df_copy['strat_ret_hpd_cum_norm'] = df_copy['strat_ret_hpd_cum'] / df_copy['strat_ret_hpd_cum'].iloc[1]
     df_copy['strat_ret_hint_cum_norm'] = df_copy['strat_ret_hint_cum'] / df_copy['strat_ret_hint_cum'].iloc[1]
     df_copy['strat_ret_lint_cum_norm'] = df_copy['strat_ret_lint_cum'] / df_copy['strat_ret_lint_cum'].iloc[1]
 

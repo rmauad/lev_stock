@@ -4,11 +4,11 @@ import numpy as np
 from .announce_execution import announce_execution
 
 @announce_execution
-def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_lev_vol, window_vol):
+def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd, quant_lev_vol, window_vol):
     df_copy = df.copy()
     # df_copy = df_copy[(df_copy['dlev'].notna()) & (df_copy['lev'].notna()) & (df_copy['intan_epk_at'].notna()) & (df_copy['KKR'].notna())]
     # df_copy = df_copy[(df_copy['dlev'].notna()) & (df_copy['lev'].notna()) & (df_copy['intan_epk_at'].notna())]
-    df_copy = df_copy[(df_copy['intan_epk_at'].notna())]
+    df_copy = df_copy[(df_copy['intan_epk_at'].notna()) & (df_copy['default_probability'].notna())]
 
     # df_copy['lev_vol'] = df_copy.groupby('gvkey')['debt_at'].transform(lambda x: x.rolling(window_vol).std())
 
@@ -39,6 +39,7 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_le
         'dlev': (quant_dlev, f'dlev_{quant_dlev}'),
         'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
         'lev': (quant_lev, f'lev_{quant_lev}'),
+        'default_probability': (quant_pd, f'pd_{quant_pd}')
         # 'KKR': (quant_kkr, f'kkr_{quant_kkr}')
         }
     
@@ -91,7 +92,7 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_le
         return df_copy
 
 @announce_execution
-def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, double_strat, intan_measure):
+def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd, double_strat, intan_measure):
     df_copy = df.copy()
 
     # Define the names of the quantile columns based on the input quantile values
@@ -99,6 +100,7 @@ def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, double_
     quant_intan_col = f'intan_at_{quant_intan}'
     quant_lev_col = f'lev_{quant_lev}'
     quant_kkr_col = f'kkr_{quant_kkr}'
+    quant_pd_col = f'pd_{quant_pd}'    
     # quant_lev_vol_col = f'lev_vol_{quant_lev_vol}'
       
     df_copy['long'] = np.where((df_copy[quant_dlev_col] == 1), 1, 0)
@@ -106,6 +108,9 @@ def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, double_
     
     df_copy['long_hlev'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
     df_copy['short_hlev'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
+    
+    df_copy['long_hpd'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_pd_col] == quant_pd), 1, 0)
+    df_copy['short_hpd'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_pd_col] == quant_pd), 1, 0)
     
     if intan_measure == 'epk':
         if double_strat == 0:
@@ -202,6 +207,8 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy['short_at'] = df_copy['short'] * df_copy['atq']
         df_copy['long_hlev_at'] = df_copy['long_hlev'] * df_copy['atq']
         df_copy['short_hlev_at'] = df_copy['short_hlev'] * df_copy['atq']
+        df_copy['long_hpd_at'] = df_copy['long_hpd'] * df_copy['atq']
+        df_copy['short_hpd_at'] = df_copy['short_hpd'] * df_copy['atq']
         df_copy['long_hint_at'] = df_copy['long_hint'] * df_copy['atq']
         df_copy['short_hint_at'] = df_copy['short_hint'] * df_copy['atq']
         df_copy['long_lint_at'] = df_copy['long_lint'] * df_copy['atq']
@@ -211,6 +218,8 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy['short_weight'] = df_copy['short_at'] / df_copy.groupby('year_month')['short_at'].transform('sum')
         df_copy['long_weight_hlev'] = df_copy['long_hlev_at'] / df_copy.groupby('year_month')['long_hlev_at'].transform('sum')
         df_copy['short_weight_hlev'] = df_copy['short_hlev_at'] / df_copy.groupby('year_month')['short_hlev_at'].transform('sum')
+        df_copy['long_weight_hpd'] = df_copy['long_hpd_at'] / df_copy.groupby('year_month')['long_hpd_at'].transform('sum')
+        df_copy['short_weight_hpd'] = df_copy['short_hpd_at'] / df_copy.groupby('year_month')['short_hpd_at'].transform('sum')
         df_copy['long_weight_hint'] = df_copy['long_hint_at'] / df_copy.groupby('year_month')['long_hint_at'].transform('sum')
         df_copy['short_weight_hint'] = df_copy['short_hint_at'] / df_copy.groupby('year_month')['short_hint_at'].transform('sum')
         df_copy['long_weight_lint'] = df_copy['long_lint_at'] / df_copy.groupby('year_month')['long_lint_at'].transform('sum')
@@ -221,6 +230,8 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy['short_weight'] = df_copy['short'] / df_copy.groupby('year_month')['short'].transform('sum')
         df_copy['long_weight_hlev'] = df_copy['long_hlev'] / df_copy.groupby('year_month')['long_hlev'].transform('sum')
         df_copy['short_weight_hlev'] = df_copy['short_hlev'] / df_copy.groupby('year_month')['short_hlev'].transform('sum')
+        df_copy['long_weight_hpd'] = df_copy['long_hpd'] / df_copy.groupby('year_month')['long_hpd'].transform('sum')
+        df_copy['short_weight_hpd'] = df_copy['short_hpd'] / df_copy.groupby('year_month')['short_hpd'].transform('sum')
         df_copy['long_weight_hint'] = df_copy['long_hint'] / df_copy.groupby('year_month')['long_hint'].transform('sum')
         df_copy['short_weight_hint'] = df_copy['short_hint'] / df_copy.groupby('year_month')['short_hint'].transform('sum')
         df_copy['long_weight_lint'] = df_copy['long_lint'] / df_copy.groupby('year_month')['long_lint'].transform('sum')
@@ -231,10 +242,12 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy[ret_col] = df_copy.groupby('gvkey')['ret'].shift(-3) # strategy starts 3 months after quarter-end date
         weighted_ret_col = f'weighted_strat_return_lead{period}'
         weighted_ret_col_hlev = f'weighted_strat_return_hlev_lead{period}'
+        weighted_ret_col_hpd = f'weighted_strat_return_hpd_lead{period}'
         weighted_ret_col_hint = f'weighted_strat_return_hint_lead{period}'
         weighted_ret_col_lint = f'weighted_strat_return_lint_lead{period}'
         df_copy[weighted_ret_col] = df_copy[ret_col] * (df_copy['long_weight'] - df_copy['short_weight'])
         df_copy[weighted_ret_col_hlev] = df_copy[ret_col] * (df_copy['long_weight_hlev'] - df_copy['short_weight_hlev'])        
+        df_copy[weighted_ret_col_hpd] = df_copy[ret_col] * (df_copy['long_weight_hpd'] - df_copy['short_weight_hpd'])        
         df_copy[weighted_ret_col_hint] = df_copy[ret_col] * (df_copy['long_weight_hint'] - df_copy['short_weight_hint'])
         df_copy[weighted_ret_col_lint] = df_copy[ret_col] * (df_copy['long_weight_lint'] - df_copy['short_weight_lint'])
         
@@ -269,10 +282,12 @@ def agg_weighted_returns(df, holding_period):
     for period in range(1, holding_period + 1):
         weighted_ret_col = f'weighted_strat_return_lead{period}'
         weighted_ret_col_hlev = f'weighted_strat_return_hlev_lead{period}'
+        weighted_ret_col_hpd = f'weighted_strat_return_hpd_lead{period}'        
         weighted_ret_col_hint = f'weighted_strat_return_hint_lead{period}'
         weighted_ret_col_lint = f'weighted_strat_return_lint_lead{period}'
         aggregation_dict[weighted_ret_col] = 'sum'
-        aggregation_dict[weighted_ret_col_hlev] = 'sum'        
+        aggregation_dict[weighted_ret_col_hlev] = 'sum'
+        aggregation_dict[weighted_ret_col_hpd] = 'sum'                
         aggregation_dict[weighted_ret_col_hint] = 'sum'
         aggregation_dict[weighted_ret_col_lint] = 'sum'
         
@@ -319,20 +334,24 @@ def avr_port_holding_period(df, holding_period):
     for i in range(1, df_port_ret_agg.shape[0] - holding_period + 2):
         port_col = f'port{i}'
         port_hlev_col = f'port_hlev{i}'
+        port_hpd_col = f'port_hpd{i}'
         port_hint_col = f'port_hint{i}'
         port_lint_col = f'port_lint{i}'
         df_port_ret_agg[port_col] = np.nan
         df_port_ret_agg[port_hlev_col] = np.nan
+        df_port_ret_agg[port_hpd_col] = np.nan
         df_port_ret_agg[port_hint_col] = np.nan
         df_port_ret_agg[port_lint_col] = np.nan
         for period in range(holding_period):
             lead_col = f'weighted_strat_return_lead{period + 1}'
             lead_hlev_col = f'weighted_strat_return_hlev_lead{period + 1}'
+            lead_hpd_col = f'weighted_strat_return_hpd_lead{period + 1}'
             lead_hint_col = f'weighted_strat_return_hint_lead{period + 1}'
             lead_lint_col = f'weighted_strat_return_lint_lead{period + 1}'
             if i + period < df_port_ret_agg.shape[0]:
                 df_port_ret_agg.loc[i + period, port_col] = df_port_ret_agg.loc[i + period, lead_col]  
-                df_port_ret_agg.loc[i + period, port_hlev_col] = df_port_ret_agg.loc[i + period, lead_hlev_col]  
+                df_port_ret_agg.loc[i + period, port_hlev_col] = df_port_ret_agg.loc[i + period, lead_hlev_col]
+                df_port_ret_agg.loc[i + period, port_hpd_col] = df_port_ret_agg.loc[i + period, lead_hpd_col]  
                 df_port_ret_agg.loc[i + period, port_hint_col] = df_port_ret_agg.loc[i + period, lead_hint_col]  
                 df_port_ret_agg.loc[i + period, port_lint_col] = df_port_ret_agg.loc[i + period, lead_lint_col]  
 
