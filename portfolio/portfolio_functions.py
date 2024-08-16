@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from tabulate import tabulate
 from linearmodels.panel.model import FamaMacBeth
 import statsmodels.api as sm
@@ -54,6 +55,15 @@ def add_stars(tstat):
     
 def fm_ret_lev(df):
     df_copy = df.copy()
+    df_copy.reset_index(inplace=True)
+    df_copy['year_month'] = df_copy['year_month'].astype(str)
+    df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m')
+    
+    # df_copy['year_month'] = df_copy['year_month'].to_timestamp()
+    # df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y%m').dt.to_period('M').to_timestamp()
+    # df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y%m')
+
+    df_copy.set_index(['GVKEY', 'year_month'], inplace=True)
     
     ###################################
     # Running Fama MacBeth regressions
@@ -466,6 +476,7 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, intan_subsample
     quant_dlev_col = f'dlev_{quant_dlev}'
     quant_intan_col = f'intan_at_{quant_intan}'
     quant_lev_col = f'lev_{quant_lev}'
+    df['ret_lead3'] = df.groupby('GVKEY')['RET'].shift(-1)
 
     df_subsample = df[df[quant_intan_col] == intan_subsample]
     # df_subsample = df
@@ -490,14 +501,14 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, intan_subsample
     filtered_grouped = filtered_df.groupby(['year_month', quant_lev_col, quant_dlev_col])
     
     # Computing the Average Return for Each Group
-    monthly_avg_returns = filtered_grouped['RET'].mean().reset_index()
+    monthly_avg_returns = filtered_grouped['ret_lead3'].mean().reset_index()
 
     monthly_avg_returns.head(50)
     # Compute the Average Across All Months
-    overall_avg_returns = monthly_avg_returns.groupby([quant_lev_col, quant_dlev_col])['RET'].mean().reset_index()
+    overall_avg_returns = monthly_avg_returns.groupby([quant_lev_col, quant_dlev_col])['ret_lead3'].mean().reset_index()
     # avr_returns_by_qui_debt_at.head(50)
     # pivot_df = overall_avg_returns.pivot(index='qui_d_debt_at', columns='qua_intan', values='ret_3mo_lead1')
-    pivot_df = overall_avg_returns.pivot(index = quant_dlev_col, columns = quant_lev_col, values='RET')
+    pivot_df = overall_avg_returns.pivot(index = quant_dlev_col, columns = quant_lev_col, values='ret_lead3')
 
     # Calculate the difference between the first and fifth rows
     difference_row = pivot_df.iloc[0] - pivot_df.iloc[quant_dlev - 1]
@@ -512,7 +523,7 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, intan_subsample
     # Calculating t-stats
     ######################
 
-    pivot_t_stat = monthly_avg_returns.pivot_table(values='RET', index=['year_month', quant_lev_col], columns = quant_dlev_col).reset_index()
+    pivot_t_stat = monthly_avg_returns.pivot_table(values='ret_lead3', index=['year_month', quant_lev_col], columns = quant_dlev_col).reset_index()
     pivot_t_stat.head(50)
     pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
     time_series_diff = pivot_t_stat[['year_month', quant_lev_col, 'ret_diff']]
@@ -605,6 +616,281 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, intan_subsample
     # print(latex_table)
     
     
+def create_dlev_lev_intan(df, quant_dlev, quant_lev):
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    # quant_intan_col = f'intan_at_{quant_intan}'
+    quant_lev_col = f'lev_{quant_lev}'
+
+    # df_subsample = df[df[quant_intan_col] == intan_subsample]
+    # df_subsample = df
+
+    # df.shape
+    # df_subsample.shape
+    grouped = df.groupby(['year_month', quant_lev_col, quant_dlev_col])
+    # grouped.head(50)
+
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_lev_col, quant_dlev_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_lev_col, quant_dlev_col])
+    
+    # Computing the Average Return for Each Group
+    # monthly_avg_returns = filtered_grouped['intan_epk_at'].mean().reset_index()
+    weighted_avg_returns = filtered_grouped.apply(
+        lambda x: np.average(x['intan_epk_at'], weights=x['atq'])
+        ).reset_index(name='intan_epk_at')
+
+    # Compute the Average Across All Months
+    # monthly_avg_returns
+    overall_avg_returns = weighted_avg_returns.groupby([quant_lev_col, quant_dlev_col])['intan_epk_at'].mean().reset_index()
+    # avr_returns_by_qui_debt_at.head(50)
+    # pivot_df = overall_avg_returns.pivot(index='qui_d_debt_at', columns='qua_intan', values='ret_3mo_lead1')
+    pivot_df = overall_avg_returns.pivot(index = quant_dlev_col, columns = quant_lev_col, values='intan_epk_at')
+
+    # Calculate the difference between the first and fifth rows
+    difference_row = pivot_df.iloc[0] - pivot_df.iloc[quant_dlev - 1]
+    difference_row.name = '1-{quant_dlev} Difference'
+
+    # Step 7: Append the difference row to the pivoted DataFrame
+    pivot_df = pivot_df._append(difference_row)
+
+    print(pivot_df)
+
+    ######################
+    # Calculating t-stats
+    ######################
+
+    pivot_t_stat = weighted_avg_returns.pivot_table(values='intan_epk_at', index=['year_month', quant_lev_col], columns = quant_dlev_col).reset_index()
+    pivot_t_stat.head(50)
+    pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
+    time_series_diff = pivot_t_stat[['year_month', quant_lev_col, 'ret_diff']]
+    time_series_diff = time_series_diff.sort_values(by = [quant_lev_col, 'year_month'])
+
+    # Dictionary to store regression results
+    regression_results = {}
+    t_stats = []
+
+    # time_series_diff['qui_debt_at'].unique()
+    # Loop through each qui_debt_at value and perform the regression
+    for quant_lev_value in time_series_diff[quant_lev_col].unique():
+        df_filtered = time_series_diff[time_series_diff[quant_lev_col] == quant_lev_value]
+        model = regress_on_constant(df_filtered)
+        regression_results[quant_lev_value] = model.summary()
+        t_stats.append(model.tvalues[0]) 
+
+    t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_lev_col].unique())
+
+    pivot_df_percent = pivot_df
+    pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
+    print(pivot_df_with_t_stats)
+
+    ##############
+    # Latex table
+    ##############
+
+    # Extract the last row (t-stats) and the rows with coefficients
+    t_stats_row = pivot_df_with_t_stats.iloc[-1]
+    avr_rows = pivot_df_with_t_stats.iloc[:-1]
+
+    # Add stars to t-stats
+    t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
+
+    # Generate LaTeX table string
+    num_cols = quant_lev
+    # num_rows = quant_dlev
+
+    # Create the column specification for the tabular environment
+    col_spec = "c" * (num_cols + 1)
+    latex_table = f"\\begin{'tabular'}{{{col_spec}}}\n"
+    latex_table += "\\toprule\n"
+
+    # Create header row
+    header = "quant\\_lev & " + " & ".join(map(str, range(1, num_cols + 1))) + " \\\\\n"
+    latex_table += header
+    latex_table += "\\midrule\n"
+
+    # Create data rows
+    for _, row in avr_rows.iterrows():
+        quant_dlev_rows = row.name
+        coeffs = [f"{row[col]:.2f}" for col in avr_rows.columns]
+        latex_table += f"{quant_dlev_rows} & " + " & ".join(coeffs) + " \\\\\n"
+
+    latex_table += "\\midrule\n"
+
+    # Add t-statistics row (assuming `t_stats_with_stars` has the same length as the number of columns)
+    t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " \\\\\n"
+    latex_table += t_stats_row
+
+    latex_table += "\\bottomrule\n"
+    latex_table += "\\end{tabular}"
+
+    print(latex_table)
+    
+def create_lev_pd_intan(df, quant_lev):
+    quant_lev_col = f'lev_{quant_lev}'
+    grouped = df.groupby(['year_month', quant_lev_col])
+
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_lev_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_lev_col])
+    
+    # Computing the Average Return for Each Group
+    weighted_avg_returns = filtered_grouped.apply(
+        lambda x: np.average(x['intan_epk_at'], weights=x['atq'])
+        ).reset_index(name='intan_epk_at')
+
+    # Computing the Weighted Average Probability of Default for Each Group
+    weighted_avg_default_prob = filtered_grouped.apply(
+        lambda x: np.average(x['default_probability'], weights=x['atq'])
+    ).reset_index(name='default_probability')
+    
+    # equal_weighted_avg_default_prob = filtered_grouped['default_probability'].mean().reset_index(name='default_probability')
+
+    # Computing the Weighted Average Probability of Default for Each Group
+    # weighted_avg_ret = filtered_grouped.apply(
+    #     lambda x: np.average(x['RET'], weights=x['atq'])
+    # ).reset_index(name='RET')
+    
+    # equal_weighted_avg_default_prob = filtered_grouped['RET'].mean().reset_index(name='RET')
+
+    # Compute the Average Across All Months
+    overall_avg_returns = weighted_avg_returns.groupby([quant_lev_col])['intan_epk_at'].mean().reset_index()
+    # overall_avg_default_prob = weighted_avg_default_prob.groupby(quant_lev_col)['default_probability'].mean().reset_index()
+    # overall_avg_ret = equal_weighted_avg_default_prob.groupby(quant_lev_col)['RET'].mean().reset_index()
+
+
+    # final_pivot_df = overall_avg_returns.pivot(columns = quant_lev_col, values='intan_epk_at').reset_index(drop=True)
+    final_df = overall_avg_returns.set_index(quant_lev_col).T
+    # final_default_prob_df = overall_avg_default_prob.set_index(quant_lev_col).T
+    # final_ret_df = overall_avg_ret.set_index(quant_lev_col).T
+
+    # final_df = pd.concat([final_df, final_default_prob_df])
+    final_df.index = ['Average Intangible/assets']
+
+    print(final_df)
+
+    ##############
+    # Latex table
+    ##############
+
+    # Generate LaTeX table string
+    num_cols = len(final_df.columns)
+    col_spec = "c" * num_cols
+    latex_table = f"\\begin{{tabular}}{{{col_spec}}}\n"
+    latex_table += "\\toprule\n"
+
+    # Create header row
+    header = " & ".join(map(str, final_df.columns)) + " \\\\\n"
+    latex_table += header
+    latex_table += "\\midrule\n"
+
+    # Create data rows for Average Return and Average Default Probability
+    for index, row in final_df.iterrows():
+        latex_table += index + " & " + " & ".join([f"{value:.2f}" for value in row]) + " \\\\\n"
+
+    latex_table += "\\bottomrule\n"
+    latex_table += "\\end{tabular}"
+
+    print(latex_table)
+    
+    
+def create_intan_lev_pd(df, quant_intan):
+    quant_intan_col = f'intan_at_{quant_intan}'
+    grouped = df.groupby(['year_month', quant_intan_col])
+
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_intan_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_intan_col])
+    
+    # Computing the Average Return for Each Group
+    weighted_avg_returns = filtered_grouped.apply(
+        lambda x: np.average(x['lev'], weights=x['atq'])
+        ).reset_index(name='lev')
+
+    # Computing the Weighted Average Probability of Default for Each Group
+    weighted_avg_default_prob = filtered_grouped.apply(
+        lambda x: np.average(x['default_probability'], weights=x['atq'])
+    ).reset_index(name='default_probability')
+    
+    # equal_weighted_avg_default_prob = filtered_grouped['default_probability'].mean().reset_index(name='default_probability')
+
+    # Computing the Weighted Average Probability of Default for Each Group
+    # weighted_avg_ret = filtered_grouped.apply(
+    #     lambda x: np.average(x['RET'], weights=x['atq'])
+    # ).reset_index(name='RET')
+    
+    # equal_weighted_avg_default_prob = filtered_grouped['RET'].mean().reset_index(name='RET')
+
+    # Compute the Average Across All Months
+    overall_avg_returns = weighted_avg_returns.groupby([quant_intan_col])['lev'].mean().reset_index()
+    overall_avg_default_prob = weighted_avg_default_prob.groupby(quant_intan_col)['default_probability'].mean().reset_index()
+    # overall_avg_ret = equal_weighted_avg_default_prob.groupby(quant_intan_col)['RET'].mean().reset_index()
+
+
+    # final_pivot_df = overall_avg_returns.pivot(columns = quant_intan_col, values='intan_epk_at').reset_index(drop=True)
+    final_df = overall_avg_returns.set_index(quant_intan_col).T
+    final_default_prob_df = overall_avg_default_prob.set_index(quant_intan_col).T
+    # final_ret_df = overall_avg_ret.set_index(quant_intan_col).T
+
+    final_df = pd.concat([final_df, final_default_prob_df])
+    final_df.index = ['Average leverage', 'Average Default Probability']
+
+    print(final_df)
+
+    ##############
+    # Latex table
+    ##############
+
+    # Generate LaTeX table string
+    num_cols = len(final_df.columns)
+    col_spec = "c" * num_cols
+    latex_table = f"\\begin{{tabular}}{{{col_spec}}}\n"
+    latex_table += "\\toprule\n"
+
+    # Create header row
+    header = " & ".join(map(str, final_df.columns)) + " \\\\\n"
+    latex_table += header
+    latex_table += "\\midrule\n"
+
+    # Create data rows for Average Return and Average Default Probability
+    for index, row in final_df.iterrows():
+        latex_table += index + " & " + " & ".join([f"{value:.2f}" for value in row]) + " \\\\\n"
+
+    latex_table += "\\bottomrule\n"
+    latex_table += "\\end{tabular}"
+
+    print(latex_table)
+    
+    
     # Function to perform regression on a constant
 def regress_on_constant(df):
     df = df.dropna(subset=['ret_diff'])  # Remove rows with NaN values in 'RET_diff'
@@ -612,6 +898,125 @@ def regress_on_constant(df):
     model = sm.OLS(df['ret_diff'], X).fit()
     return model
 
+def create_dlev_lev_pd(df, quant_dlev, quant_lev):
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    # quant_intan_col = f'intan_at_{quant_intan}'
+    quant_lev_col = f'lev_{quant_lev}'
+
+    # df_subsample = df[df[quant_intan_col] == intan_subsample]
+    # df_subsample = df
+
+    # df.shape
+    # df_subsample.shape
+    grouped = df.groupby(['year_month', quant_lev_col, quant_dlev_col])
+    # grouped.head(50)
+
+    # Count the number of stocks in each group
+    group_counts = grouped.size().reset_index(name='counts')
+
+    # Filter out the groups that have fewer than 30 stocks
+    filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+    # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+    filtered_df = df.merge(filtered_groups.drop('counts', axis=1), 
+                                on=['year_month', quant_lev_col, quant_dlev_col], 
+                                how='inner')
+
+    # Re-group if necessary for further processing
+    filtered_grouped = filtered_df.groupby(['year_month', quant_lev_col, quant_dlev_col])
+    
+    # Computing the Average Return for Each Group
+    # monthly_avg_returns = filtered_grouped['intan_epk_at'].mean().reset_index()
+    weighted_avg_returns = filtered_grouped.apply(
+        lambda x: np.average(x['default_probability'], weights=x['atq'])
+        ).reset_index(name='default_probability')
+
+    # Compute the Average Across All Months
+    # monthly_avg_returns
+    overall_avg_returns = weighted_avg_returns.groupby([quant_lev_col, quant_dlev_col])['default_probability'].mean().reset_index()
+    # avr_returns_by_qui_debt_at.head(50)
+    # pivot_df = overall_avg_returns.pivot(index='qui_d_debt_at', columns='qua_intan', values='ret_3mo_lead1')
+    pivot_df = overall_avg_returns.pivot(index = quant_dlev_col, columns = quant_lev_col, values='default_probability')
+
+    # Calculate the difference between the first and fifth rows
+    difference_row = pivot_df.iloc[0] - pivot_df.iloc[quant_dlev - 1]
+    difference_row.name = '1-{quant_dlev} Difference'
+
+    # Step 7: Append the difference row to the pivoted DataFrame
+    pivot_df = pivot_df._append(difference_row)
+
+    print(pivot_df)
+
+    ######################
+    # Calculating t-stats
+    ######################
+
+    pivot_t_stat = weighted_avg_returns.pivot_table(values='default_probability', index=['year_month', quant_lev_col], columns = quant_dlev_col).reset_index()
+    pivot_t_stat.head(50)
+    pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
+    time_series_diff = pivot_t_stat[['year_month', quant_lev_col, 'ret_diff']]
+    time_series_diff = time_series_diff.sort_values(by = [quant_lev_col, 'year_month'])
+
+    # Dictionary to store regression results
+    regression_results = {}
+    t_stats = []
+
+    # time_series_diff['qui_debt_at'].unique()
+    # Loop through each qui_debt_at value and perform the regression
+    for quant_lev_value in time_series_diff[quant_lev_col].unique():
+        df_filtered = time_series_diff[time_series_diff[quant_lev_col] == quant_lev_value]
+        model = regress_on_constant(df_filtered)
+        regression_results[quant_lev_value] = model.summary()
+        t_stats.append(model.tvalues[0]) 
+
+    t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_lev_col].unique())
+
+    pivot_df_percent = pivot_df
+    pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
+    print(pivot_df_with_t_stats)
+
+    ##############
+    # Latex table
+    ##############
+
+    # Extract the last row (t-stats) and the rows with coefficients
+    t_stats_row = pivot_df_with_t_stats.iloc[-1]
+    avr_rows = pivot_df_with_t_stats.iloc[:-1]
+
+    # Add stars to t-stats
+    t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
+
+    # Generate LaTeX table string
+    num_cols = quant_lev
+    # num_rows = quant_dlev
+
+    # Create the column specification for the tabular environment
+    col_spec = "c" * (num_cols + 1)
+    latex_table = f"\\begin{'tabular'}{{{col_spec}}}\n"
+    latex_table += "\\toprule\n"
+
+    # Create header row
+    header = "quant\\_lev & " + " & ".join(map(str, range(1, num_cols + 1))) + " \\\\\n"
+    latex_table += header
+    latex_table += "\\midrule\n"
+
+    # Create data rows
+    for _, row in avr_rows.iterrows():
+        quant_dlev_rows = row.name
+        coeffs = [f"{row[col]:.2f}" for col in avr_rows.columns]
+        latex_table += f"{quant_dlev_rows} & " + " & ".join(coeffs) + " \\\\\n"
+
+    latex_table += "\\midrule\n"
+
+    # Add t-statistics row (assuming `t_stats_with_stars` has the same length as the number of columns)
+    t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " \\\\\n"
+    latex_table += t_stats_row
+
+    latex_table += "\\bottomrule\n"
+    latex_table += "\\end{tabular}"
+
+    print(latex_table)
+    
 
 def create_dlev_pd_intan_port(df, quant_dlev, quant_intan, quant_pd, intan_subsample):
     quant_dlev_col = f'dlev_{quant_dlev}'

@@ -18,20 +18,87 @@ def plot_intan_pd(df):
 
 
     df_copy = df.copy()
+    # df_copy = (df_copy
+    #             .assign(intan_at_avg = df_copy.groupby('year_month')['intan_epk_at'].transform('mean'))
+    #             .assign(pd_at_avg = df_copy.groupby('year_month')['default_probability'].transform('mean'))
+    #             )
+    
     df_copy = (df_copy
-                .assign(intan_at_avr = df_copy.groupby('year_month')['intan_epk_at'].transform('mean'))
-                .assign(pd_at_avr = df_copy.groupby('year_month')['default_probability'].transform('mean'))
-                )
+               .assign(weighted_intan = df_copy['intan_epk_at'] * df_copy['atq'])
+               .assign(weighted_pd = df_copy['default_probability'] * df_copy['atq'])
+               .assign(sum_weights = df_copy.groupby('year_month')['atq'].transform('sum'))
+               .assign(intan_at_avg = lambda x: x.groupby('year_month')['weighted_intan'].transform('sum') / x['sum_weights'])
+               .assign(pd_at_avg = lambda x: x.groupby('year_month')['weighted_pd'].transform('sum') / x['sum_weights'])
+               )
+    
     df_copy = df_copy.reset_index()
     df_avg = df_copy.drop_duplicates(subset=['year_month'])
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.scatter(df_avg['intan_at_avr'], df_avg['pd_at_avr'])
+    ax.scatter(df_avg['intan_at_avg'], df_avg['pd_at_avg'])
     ax.set_title('Intangible/Assets and Probability of Default')
     ax.set_xlabel('Intangible/Assets')
-    ax.set_ylabel('Probability of Default (Merton Model)')
+    ax.set_ylabel('Average probability of default')
     ax.grid(True)
     
+    fig.tight_layout()  # Automatically adjust layout to fit within figure area
+
+    return fig
+
+def plot_pd(df):
+    plt.rcParams.update({
+    'font.size': 22,           # General font size
+    'axes.titlesize': 24,      # Title font size
+    'axes.labelsize': 18,      # Axis label font size
+    'xtick.labelsize': 18,     # X-tick label font size
+    'ytick.labelsize': 18,     # Y-tick label font size
+    'legend.fontsize': 18,     # Legend font size
+    'figure.titlesize': 24     # Figure title font size
+    })
+
+
+    df_copy = df.copy()
+    # df_copy = (df_copy
+    #             .assign(intan_at_avg = df_copy.groupby('year_month')['intan_epk_at'].transform('mean'))
+    #             .assign(pd_at_avg = df_copy.groupby('year_month')['default_probability'].transform('mean'))
+    #             )
+    
+    df_copy = (df_copy
+               .assign(weighted_pd = df_copy['default_probability'] * df_copy['atq'])
+               .assign(sum_weights = df_copy.groupby('year_month')['atq'].transform('sum'))
+               .assign(pd_at_avg = lambda x: x.groupby('year_month')['weighted_pd'].transform('sum') / x['sum_weights'])
+               )
+    
+    df_copy = df_copy.reset_index()
+    df_avg = df_copy.drop_duplicates(subset=['year_month'])
+    df_avg['year_month_dt'] = df_avg['year_month'].dt.to_timestamp() 
+    df_avg.sort_values('year_month_dt', inplace=True)
+    # df_avg = df_avg[df_avg['year_month_dt'] <= '1999-01-01']
+
+    # Example recession dates
+    recession_dates = [
+        ('1980-01-01', '1980-07-01'),
+        ('1981-07-01', '1982-11-01'),
+        ('1990-07-01', '1990-10-01'),
+        ('2001-04-01', '2001-11-01'),
+        ('2007-12-01', '2009-06-01'),
+        ('2007-12-01', '2009-06-01'),
+        ('2020-02-01', '2020-04-01'),
+        # Add more recessions as needed
+        ]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(df_avg['year_month_dt'], df_avg['pd_at_avg'])  # 'marker' argument is optional, adds points on the line
+    ax.set_title('Probability of Default (Merton Model)')
+    ax.set_xlabel('Period')
+    ax.set_ylabel('Average probability of default')
+    ax.grid(True)
+    
+    # Adding the shaded areas for recessions
+    for start_date, end_date in recession_dates:
+        ax.axvspan(pd.to_datetime(start_date), pd.to_datetime(end_date), color='gray', alpha=0.5)
+
+
     fig.tight_layout()  # Automatically adjust layout to fit within figure area
 
     return fig

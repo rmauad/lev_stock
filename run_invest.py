@@ -98,7 +98,7 @@ df_strat_ret = ist.calc_avr_portfolio(df_port_ret_agg_avr)
 # df_sp500, fig = ist.plot_returns_mkt(df_strat_ret, sp500, all_stocks)
 df_strat, fig = ist.plot_returns(df_strat_ret, double_strat)
 
-plt.savefig(figfolder + 'cum_ret_2_perc_single.pdf', format='pdf',  bbox_inches='tight')
+plt.savefig(figfolder + 'test.pdf', format='pdf',  bbox_inches='tight')
 
 
 df_sharpe = ist.merge_df_rf(df_strat, rf)
@@ -107,7 +107,7 @@ rolling_sharpe_ratio = ist.rolling_sharpe_ratio(excess_returns, window, dates)
 plot_sharpe = ist.plot_sharpe(rolling_sharpe_ratio, double_strat)
 
 
-plt.savefig(figfolder + 'sr_ret_2_perc_single.pdf', format='pdf', bbox_inches='tight')
+plt.savefig(figfolder + 'sr_test.pdf', format='pdf', bbox_inches='tight')
 print("Finished")
 # save = df_strat_ret.to_feather('data/feather/df_strat_ret.feather')
 

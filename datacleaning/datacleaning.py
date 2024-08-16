@@ -73,52 +73,15 @@ def load_fm(redo = False, origin = "pickle"):
         df_fm = prep_fm(cc_pt, betas, kkr)
         df_fm = df_fm.reset_index()
         df_fm = compute_default_probabilities(df_fm, progress_interval=1000)
-
+        # df_fm.set_index(['GVKEY', 'year_month'], inplace=True)
+        
         df_fm.to_feather('../data/feather/df_fm.feather')
     else:
         df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
-        # Merge with ok (organization capital/total assets)
-        intan = pd.read_pickle('../data/pickle/int_xsec.pkl')
-        df_intan_sel = intan[['datadate', 'gvkey',  'ok']]
-
-        df_intan_sel_pre_merge = (df_intan_sel
-            .assign(date = pd.to_datetime(df_intan_sel["datadate"], format = '%Y-%m-%d', errors = "coerce")) #non-conforming entries will be coerced to "Not a Time - NaT"
-            .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-            .rename(columns = {'gvkey': 'GVKEY'})
-        )
-
-        df_intan_sel_pre_merge = df_intan_sel_pre_merge.drop(columns = ['datadate', 'date'])
-        df_fm = (df_fm
-                 .drop(columns = ['GVKEY'])
-                 .assign(year_month = lambda x: x['year_month'].dt.to_period('M'))
-                 )
+        # df_fm = (df_fm
+        #          .assign(intan_at = lambda x: x['intan_epk'] / x['atq']))
         
-        df_fm = df_fm.reset_index()
-        
-        df_fm_merge = (pd.merge(df_fm, df_intan_sel_pre_merge, how = 'left', on = ['year_month', 'GVKEY']))
-        
-        df_fm_merge_no_dup = df_fm_merge.drop_duplicates(subset=['GVKEY', 'year_month'], keep='first')
-        
-        df_fm_merge_no_dup.to_feather('../data/feather/df_fm.feather')
-
-        # Pick the firm and period chosen by Doshi et al (2019) as a sample (only one firm, 2 years)
-        # GVKEY = 12141, year = 2000 and 2001
-        # df_fm = df_fm.reset_index()
-        # df_fm_sample = df_fm[(df_fm['GVKEY'] == 12141) & (df_fm['year'] >= 2000) & (df_fm['year'] <= 2001)]
-        # df_fm_sample = df_fm.sample(frac = 0.01, random_state = 42)
-        # df_new = compute_default_probabilities(df_fm, progress_interval=1000)
-        
-
-
-# def custom_fill(group):
-#     group['atq'] = group['atq'].interpolate()
-#     group['capxy'] = group['capxy'].interpolate()
-#     group['cash_at'] = group['cash_at'].interpolate()
-#     group['debt_at'] = group['debt_at'].interpolate()
-#     group['org_cap_comp'] = group['org_cap_comp'].interpolate()
-#     group['ppentq'] = group['ppentq'].interpolate()
-#     group['state'] = group['state'].ffill()
-#     return group
+    return df_fm
 
 @announce_execution
 def merge_comp_intan_epk(df, intan):
@@ -253,7 +216,7 @@ def merge_crsp_comp(df, crsp, ff):
 
     # ccm_monthly_no_dup.set_index(['GVKEY', 'year_month'], inplace=True)
     columns_fill = ['atq', 'ceqq', 'dlttq', 'dlcq', 'niq', 'sic', 'state', 'ppentq', 'ltq', 'lev', 'dlev']
-    col_intan_fill = ['intan_epk']
+    col_intan_fill = ['intan_epk', 'ok']
 
     # Fill forward the missing values within each group
     ccm_monthly_filled = ccm_monthly_no_dup.copy()
