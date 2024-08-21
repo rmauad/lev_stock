@@ -300,6 +300,7 @@ def prep_fm(df, betas, kkr):
     df_copy['roe'] = df_copy['niq'] / df_copy['ceqq']
     df_copy['roa'] = df_copy['niq'] / df_copy['atq']
 
+
     # Change book-to-market ratio
     df_copy = (df_copy
         #.assign(ceqq_lag1 = df.groupby('GVKEY')['ceqq'].shift(1))
@@ -341,11 +342,14 @@ def prep_fm(df, betas, kkr):
         .assign(ret_3mo_lead1 = lambda x: x.groupby('GVKEY')['ret_3mo'].shift(-1))
         .assign(hlev = lambda x: x['terc_lev'] == 'High')
         .assign(llev = lambda x: x['terc_lev'] == 'Low')
+        .assign(ret_lead1 = lambda x: x.groupby('GVKEY')['RET'].shift(-1))
+        .assign(ret_lead2 = lambda x: x.groupby('GVKEY')['RET'].shift(-2))
+        .assign(ret_lead3 = lambda x: x.groupby('GVKEY')['RET'].shift(-3))
         # .assign(hint = lambda x: x['qua_intan'] == 4)
         # .assign(lint = lambda x: x['qua_intan'] == 1)                
         .drop(columns=['ret_aux', 'ret_aux_lead1', 'ret_aux_lead2'])       
         )
-
+    
     # df_new[['RET', 'one_year_cum_return']].head(50)
     #df_new[['RET', 'ret_aux', 'ret_aux_lead1', 'ret_aux_lead2', 'ret_3mo', 'ret_3mo_lead1']].head(50)
     # df_new[['hint', 'quart_intan']][df_new['quart_intan'] == 4].tail(50)
@@ -442,6 +446,7 @@ def merton_model(me, sigma_e, debt, rf, time_horizon, max_iterations=200, tolera
     # Compute final values even if max iterations reached
     d2 = (np.log(asset_value / debt) + (rf - 0.5 * asset_volatility**2) * time_horizon) / (asset_volatility * np.sqrt(time_horizon))
     distance_to_default = d2
+    
     default_probability = norm.cdf(-distance_to_default)
 
     # Return results along with convergence status

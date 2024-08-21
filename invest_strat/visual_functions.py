@@ -29,6 +29,7 @@ def plot_intan_pd(df):
                .assign(sum_weights = df_copy.groupby('year_month')['atq'].transform('sum'))
                .assign(intan_at_avg = lambda x: x.groupby('year_month')['weighted_intan'].transform('sum') / x['sum_weights'])
                .assign(pd_at_avg = lambda x: x.groupby('year_month')['weighted_pd'].transform('sum') / x['sum_weights'])
+               .query('intan_at_avg > 0')
                )
     
     df_copy = df_copy.reset_index()

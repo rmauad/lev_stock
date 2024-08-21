@@ -49,9 +49,10 @@ df_quantiles = ist.create_quantiles(df, quant_dlev, quant_intan, quant_lev, quan
 # # pf.create_dlev_lev_intan(df_quantiles, quant_dlev, quant_lev)
 
 # pf.fm_ret_lev(df_quantiles)
-# pf.create_dlev_intan_port(df_quantiles, quant_dlev, quant_intan)
-# pf.create_dlev_pd_port(df_quantiles, quant_dlev, quant_pd)
-pf.create_dlev_lev_port(df_quantiles, quant_dlev, quant_intan, quant_lev, intan_subsample)
+pf.create_dlev_intan_port(df_quantiles, quant_dlev, quant_intan, quant_pd, filename = 'dlev_intan_lpd.tex')
 
-# pf.create_dlev_pd_intan_port(df_quantiles, quant_dlev, quant_intan, quant_pd, intan_subsample)
+# pf.create_dlev_pd_port(df_quantiles, quant_dlev, quant_pd)
+#pf.create_dlev_lev_port(df_quantiles, quant_dlev, quant_intan, quant_lev, quant_pd, filename = 'dlev_lev_hint_hpd.tex')
+
+# # pf.create_dlev_pd_intan_port(df_quantiles, quant_dlev, quant_intan, quant_pd, intan_subsample)
 
