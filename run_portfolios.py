@@ -35,10 +35,10 @@ window_vol = 12
 
 # Print paper tables (summary statistics, Fama-MacBeth regressions, etc.)
 # pf.create_sum_stats(df)
-fig = ist.plot_intan_pd(df)
-plt.savefig(figfolder + 'intan_pd.pdf', format='pdf', bbox_inches='tight')
-fig = ist.plot_pd(df)
-plt.savefig(figfolder + 'pd.pdf', format='pdf', bbox_inches='tight')
+# fig = ist.plot_intan_pd(df)
+# plt.savefig(figfolder + 'intan_pd.pdf', format='pdf', bbox_inches='tight')
+# fig = ist.plot_pd(df)
+# plt.savefig(figfolder + 'pd.pdf', format='pdf', bbox_inches='tight')
 
 df_quantiles = ist.create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd, quant_lev_vol, window_vol)
 # # df_quantiles = pf.create_quantiles(df, quant_dlev, quant_lev, quant_intan)
@@ -49,10 +49,10 @@ df_quantiles = ist.create_quantiles(df, quant_dlev, quant_intan, quant_lev, quan
 # # pf.create_dlev_lev_intan(df_quantiles, quant_dlev, quant_lev)
 
 # pf.fm_ret_lev(df_quantiles)
-pf.create_dlev_intan_port(df_quantiles, quant_dlev, quant_intan, quant_pd, filename = 'dlev_intan_lpd.tex')
+# pf.create_dlev_intan_port(df_quantiles, quant_dlev, quant_intan, quant_pd, filename = 'dlev_intan_lpd.tex')
 
 # pf.create_dlev_pd_port(df_quantiles, quant_dlev, quant_pd)
-#pf.create_dlev_lev_port(df_quantiles, quant_dlev, quant_intan, quant_lev, quant_pd, filename = 'dlev_lev_hint_hpd.tex')
+pf.create_dlev_lev_port(df_quantiles, quant_dlev, quant_intan, quant_lev, quant_pd, filename = 'dlev_lev_lint.tex')
 
 # # pf.create_dlev_pd_intan_port(df_quantiles, quant_dlev, quant_intan, quant_pd, intan_subsample)
 

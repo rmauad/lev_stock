@@ -255,6 +255,7 @@ def create_dlev_intan_port(df, quant_dlev, quant_intan, quant_pd, filename):
     quant_pd_col = f'pd_{quant_pd}'
     
     df_subsample = df_copy[df_copy[quant_pd_col] == 1]
+    # df_subsample = df_copy
 
     grouped = df_subsample.groupby(['year_month', quant_intan_col, quant_dlev_col])
 
@@ -272,21 +273,20 @@ def create_dlev_intan_port(df, quant_dlev, quant_intan, quant_pd, filename):
     # Re-group if necessary for further processing
     filtered_grouped = filtered_df.groupby(['year_month', quant_intan_col, quant_dlev_col])
 
-    columns_to_process = ['ret_lead1', 'ret_lead2', 'ret_lead3']
+    columns_to_process = ['ret_lead1', 'ret_lead2']
     
     latex_output = """
-
-\\begin{table}
+\\begin{table}    
 \\centering
 \\small
 \\setlength{\\tabcolsep}{3pt} % Adjust horizontal spacing
-\\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{3}{c}l*{3}{c}}
+\\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{2}{c}l*{2}{c}}
 \\toprule
-\\multicolumn{7}{c}{Intangible/assets portfolio} \\\\
-\\cmidrule(r){2-4} \\cmidrule(l){5-7}
-Leverage & \\multicolumn{3}{c}{Equal-weighted} & & \\multicolumn{3}{c}{Value-weighted} \\\\
-\\cmidrule(r){2-4} \\cmidrule(l){5-7}
-change portfolio & 1 (Lowest) & 2 & 3 (Highest) & & 1 (Lowest) & 2 & 3 (Highest) \\\\
+\\multicolumn{5}{c}{Intangible/assets portfolio} \\\\
+\\cmidrule(r){2-3} \\cmidrule(l){4-5}
+Leverage & \\multicolumn{2}{c}{Equal-weighted} & & \\multicolumn{2}{c}{Value-weighted} \\\\
+\\cmidrule(r){2-3} \\cmidrule(l){4-5}
+change portfolio & 1 (Lowest) & 3 (Highest) & & 1 (Lowest) & 3 (Highest) \\\\
 \\midrule
 """
 
@@ -307,11 +307,11 @@ change portfolio & 1 (Lowest) & 2 & 3 (Highest) & & 1 (Lowest) & 2 & 3 (Highest)
         pivot_df = overall_avg_returns.pivot(index=quant_dlev_col, columns=quant_intan_col, values=col)
         pivot_weighted_df = overall_weighted_avg_returns.pivot(index=quant_dlev_col, columns=quant_intan_col, values=f'weighted_{col}')
 
-        # Calculate the difference between the first and fifth rows
-        difference_row = pivot_df.iloc[0] - pivot_df.iloc[quant_dlev-1]
+        # Calculate the difference between the first and last rows
+        difference_row = pivot_df.iloc[0] - pivot_df.iloc[-1]
         difference_row.name = f'1-{quant_dlev} Difference'
 
-        weighted_difference_row = pivot_weighted_df.iloc[0] - pivot_weighted_df.iloc[quant_dlev-1]
+        weighted_difference_row = pivot_weighted_df.iloc[0] - pivot_weighted_df.iloc[-1]
         weighted_difference_row.name = f'1-{quant_dlev} Difference'
 
         # Append the difference row to the pivoted DataFrame
@@ -319,45 +319,62 @@ change portfolio & 1 (Lowest) & 2 & 3 (Highest) & & 1 (Lowest) & 2 & 3 (Highest)
         pivot_weighted_df = pivot_weighted_df._append(weighted_difference_row)
 
         ######################
-        # Calculating t-stats (Equal-weighted)
+        # Calculating std errors and CIs (Equal-weighted)
         ######################
 
-        pivot_t_stat = monthly_avg_returns.pivot_table(values=col, index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
-        pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
-        time_series_diff = pivot_t_stat[['year_month', quant_intan_col, 'ret_diff']]
+        pivot_stat = monthly_avg_returns.pivot_table(values=col, index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
+        pivot_stat['ret_diff'] = pivot_stat[1] - pivot_stat[quant_dlev]
+        time_series_diff = pivot_stat[['year_month', quant_intan_col, 'ret_diff']]
 
-        # Dictionary to store regression results
+        std_errors = []
+        confidence_intervals = []
+        p_values = []
         t_stats = []
 
-        # Loop through each quant_intan value and perform the regression
-        for quant_intan_value in time_series_diff[quant_intan_col].unique():
+        # Loop through first and last quant_intan values and perform the regression
+        for quant_intan_value in [time_series_diff[quant_intan_col].min(), time_series_diff[quant_intan_col].max()]:
             df_filtered = time_series_diff[time_series_diff[quant_intan_col] == quant_intan_value]
             model = regress_on_constant(df_filtered)
-            t_stats.append(model.tvalues[0]) 
+            t_stats.append(model.tvalues[0])
+            std_errors.append(model.bse[0]*100)
+            ci = model.conf_int().iloc[0]*100
+            confidence_intervals.append((ci[0], ci[1]))
+            p_values.append(model.pvalues[0])
 
-        t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_intan_col].unique())
+        # t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_intan_col].unique())
+        t_stats_row = pd.DataFrame([t_stats], columns=[time_series_diff[quant_intan_col].min(), time_series_diff[quant_intan_col].max()])
+        std_errors_row = pd.DataFrame([std_errors], columns=[time_series_diff[quant_intan_col].min(), time_series_diff[quant_intan_col].max()])
 
         pivot_df_percent = pivot_df * 100
+        
         pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
 
         ######################
-        # Calculating t-stats (Weighted)
+        # Calculating std errors and CIs (Weighted)
         ######################
 
-        pivot_weighted_t_stat = monthly_weighted_avg_returns.pivot_table(values=f'weighted_{col}', index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
-        pivot_weighted_t_stat['ret_diff'] = pivot_weighted_t_stat[1] - pivot_weighted_t_stat[quant_dlev]
-        time_series_weighted_diff = pivot_weighted_t_stat[['year_month', quant_intan_col, 'ret_diff']]
+        pivot_weighted_stat = monthly_weighted_avg_returns.pivot_table(values=f'weighted_{col}', index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
+        pivot_weighted_stat['ret_diff'] = pivot_weighted_stat[1] - pivot_weighted_stat[quant_dlev]
+        time_series_weighted_diff = pivot_weighted_stat[['year_month', quant_intan_col, 'ret_diff']]
 
-        # Dictionary to store regression results
+        weighted_std_errors = []
+        weighted_confidence_intervals = []
+        weighted_p_values = []
         weighted_t_stats = []
 
-        # Loop through each quant_intan value and perform the regression
-        for quant_intan_value in time_series_weighted_diff[quant_intan_col].unique():
+        # Loop through first and last quant_intan values and perform the regression
+        for quant_intan_value in [time_series_weighted_diff[quant_intan_col].min(), time_series_weighted_diff[quant_intan_col].max()]:
             df_filtered_weighted = time_series_weighted_diff[time_series_weighted_diff[quant_intan_col] == quant_intan_value]
             model_weighted = regress_on_constant(df_filtered_weighted)
-            weighted_t_stats.append(model_weighted.tvalues[0]) 
+            weighted_t_stats.append(model_weighted.tvalues[0])
+            weighted_std_errors.append(model_weighted.bse[0]*100)
+            weighted_ci = model_weighted.conf_int().iloc[0]*100
+            weighted_confidence_intervals.append((weighted_ci[0], weighted_ci[1]))
+            weighted_p_values.append(model_weighted.pvalues[0])
 
-        weighted_t_stats_row = pd.DataFrame([weighted_t_stats], columns=time_series_weighted_diff[quant_intan_col].unique())
+        # weighted_t_stats_row = pd.DataFrame([weighted_t_stats], columns=time_series_weighted_diff[quant_intan_col].unique())
+        weighted_t_stats_row = pd.DataFrame([weighted_t_stats], columns=[time_series_weighted_diff[quant_intan_col].min(), time_series_weighted_diff[quant_intan_col].max()])
+        weighted_std_errors_row = pd.DataFrame([weighted_std_errors], columns=[time_series_weighted_diff[quant_intan_col].min(), time_series_weighted_diff[quant_intan_col].max()])
 
         pivot_weighted_df_percent = pivot_weighted_df * 100
         pivot_weighted_df_with_t_stats = pivot_weighted_df_percent._append(weighted_t_stats_row, ignore_index=True)
@@ -367,26 +384,49 @@ change portfolio & 1 (Lowest) & 2 & 3 (Highest) & & 1 (Lowest) & 2 & 3 (Highest)
         avr_rows = pivot_df_with_t_stats.iloc[:-1]
         weighted_t_stats_row = pivot_weighted_df_with_t_stats.iloc[-1]
         weighted_avr_rows = pivot_weighted_df_with_t_stats.iloc[:-1]
+        
+        # Extract the rows with coefficients
+        avr_rows = pivot_df_percent
+        weighted_avr_rows = pivot_weighted_df_percent
+
+        # Add stars based on p-values
+        std_errors_with_stars = [f"({se:.2f}){add_stars(pval)}" for se, pval in zip(std_errors, p_values)]
+        weighted_std_errors_with_stars = [f"({se:.2f}){add_stars(pval)}" for se, pval in zip(weighted_std_errors, weighted_p_values)]
+        ci_strings = [f"[{ci[0]:.2f}, {ci[1]:.2f}]" for ci in confidence_intervals]
+        weighted_ci_strings = [f"[{ci[0]:.2f}, {ci[1]:.2f}]" for ci in weighted_confidence_intervals]
 
         # Add stars to t-stats
-        t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
-        weighted_t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in weighted_t_stats_row]
-
+        # t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
+        # weighted_t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in weighted_t_stats_row]
+        
+        t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats]
+        weighted_t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in weighted_t_stats]
+        
         # Create the rows for the table
         for idx, row in avr_rows.iterrows():
             quant_dlev_rows = row.name
-            eqw_coeffs = [f"{row[col]:.2f}" for col in avr_rows.columns]
+            eqw_coeffs = [f"{row[col]:.2f}" for col in [avr_rows.columns[0], avr_rows.columns[-1]]]
             latex_output += f"{quant_dlev_rows} & " + " & ".join(eqw_coeffs) + " & & "
 
             # Data rows for weighted average
             wgt_row = weighted_avr_rows.loc[quant_dlev_rows]
-            wgt_coeffs = [f"{wgt_row[col]:.2f}" for col in weighted_avr_rows.columns]
+            wgt_coeffs = [f"{wgt_row[col]:.2f}" for col in [weighted_avr_rows.columns[0], weighted_avr_rows.columns[-1]]]
             latex_output += " & ".join(wgt_coeffs) + " \\\\\n"
 
         # T-statistics row
         eqw_t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " & & "
         wgt_t_stats_row = " & ".join(weighted_t_stats_with_stars) + " \\\\\n"
         latex_output += eqw_t_stats_row + wgt_t_stats_row
+        
+        # Standard errors row
+        eqw_se_row = "(Std. Errors) & " + " & ".join(std_errors_with_stars) + " & & "
+        wgt_se_row = " & ".join(weighted_std_errors_with_stars) + " \\\\\n"
+        latex_output += eqw_se_row + wgt_se_row
+
+        # Confidence intervals row
+        eqw_ci_row = "(95\% CI) & " + " & ".join(ci_strings) + " & & "
+        wgt_ci_row = " & ".join(weighted_ci_strings) + " \\\\\n"
+        latex_output += eqw_ci_row + wgt_ci_row
 
         latex_output += "\\midrule\n"
 
@@ -397,7 +437,306 @@ change portfolio & 1 (Lowest) & 2 & 3 (Highest) & & 1 (Lowest) & 2 & 3 (Highest)
 \\label{table:comparison}
 \\end{table}
 """
+    
     create_latex_table_file(latex_output, filename)
+    
+# def create_dlev_intan_port(df, quant_dlev, quant_intan, quant_pd, filename):
+#     df_copy = df.copy()
+#     quant_dlev_col = f'dlev_{quant_dlev}'
+#     quant_intan_col = f'intan_at_{quant_intan}'
+#     quant_pd_col = f'pd_{quant_pd}'
+    
+#     #df_subsample = df_copy[df_copy[quant_pd_col] == 1]
+#     df_subsample = df_copy
+
+#     grouped = df_subsample.groupby(['year_month', quant_intan_col, quant_dlev_col])
+
+#     # Count the number of stocks in each group
+#     group_counts = grouped.size().reset_index(name='counts')
+
+#     # Filter out the groups that have fewer than 30 stocks
+#     filtered_groups = group_counts[group_counts['counts'] >= 30]
+
+#     # Merge the filtered groups back to the original DataFrame to keep only the valid groups
+#     filtered_df = df_subsample.merge(filtered_groups.drop('counts', axis=1), 
+#                                 on=['year_month', quant_intan_col, quant_dlev_col], 
+#                                 how='inner')
+
+#     # Re-group if necessary for further processing
+#     filtered_grouped = filtered_df.groupby(['year_month', quant_intan_col, quant_dlev_col])
+
+#     columns_to_process = ['ret_lead1', 'ret_lead2']
+    
+#     latex_output = """
+    
+# \\begin{table}    
+# \\centering
+# \\small
+# \\setlength{\\tabcolsep}{3pt} % Adjust horizontal spacing
+# \\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{2}{c}l*{2}{c}}
+# \\toprule
+# \\multicolumn{5}{c}{Intangible/assets portfolio} \\\\
+# \\cmidrule(r){2-3} \\cmidrule(l){4-5}
+# Leverage & \\multicolumn{2}{c}{Equal-weighted} & & \\multicolumn{2}{c}{Value-weighted} \\\\
+# \\cmidrule(r){2-3} \\cmidrule(l){4-5}
+# change portfolio & 1 (Lowest) & 3 (Highest) & & 1 (Lowest) & 3 (Highest) \\\\
+# \\midrule
+# """
+
+#     for idx, col in enumerate(columns_to_process):
+#         # Equal-weighted average returns
+#         monthly_avg_returns = filtered_grouped[col].mean().reset_index()
+
+#         # Weighted average returns
+#         monthly_weighted_avg_returns = filtered_grouped.apply(lambda x: (x[col] * x['me']).sum() / x['me'].sum()).reset_index(name=f'weighted_{col}')
+        
+#         # Compute the Average Across All Months for equal-weighted
+#         overall_avg_returns = monthly_avg_returns.groupby([quant_intan_col, quant_dlev_col])[col].mean().reset_index()
+
+#         # Compute the Average Across All Months for weighted average
+#         overall_weighted_avg_returns = monthly_weighted_avg_returns.groupby([quant_intan_col, quant_dlev_col])[f'weighted_{col}'].mean().reset_index()
+
+#         # Pivot the DataFrame to get the correct format for LaTeX
+#         pivot_df = overall_avg_returns.pivot(index=quant_dlev_col, columns=quant_intan_col, values=col)
+#         pivot_weighted_df = overall_weighted_avg_returns.pivot(index=quant_dlev_col, columns=quant_intan_col, values=f'weighted_{col}')
+
+#         # Calculate the difference between the first and last rows
+#         difference_row = pivot_df.iloc[0] - pivot_df.iloc[-1]
+#         difference_row.name = f'1-{quant_dlev} Difference'
+
+#         weighted_difference_row = pivot_weighted_df.iloc[0] - pivot_weighted_df.iloc[-1]
+#         weighted_difference_row.name = f'1-{quant_dlev} Difference'
+
+#         # Append the difference row to the pivoted DataFrame
+#         pivot_df = pivot_df._append(difference_row)
+#         pivot_weighted_df = pivot_weighted_df._append(weighted_difference_row)
+
+#         ######################
+#         # Calculating t-stats (Equal-weighted)
+#         ######################
+
+#         pivot_t_stat = monthly_avg_returns.pivot_table(values=col, index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
+#         pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
+#         time_series_diff = pivot_t_stat[['year_month', quant_intan_col, 'ret_diff']]
+
+#         # Dictionary to store regression results
+#         # t_stats = []
+#         std_errors = []
+#         confidence_intervals = []
+
+#         # Loop through first and last quant_intan values and perform the regression
+#         for quant_intan_value in [time_series_diff[quant_intan_col].min(), time_series_diff[quant_intan_col].max()]:
+#             df_filtered = time_series_diff[time_series_diff[quant_intan_col] == quant_intan_value]
+#             model = regress_on_constant(df_filtered)
+#             # t_stats.append(model.tvalues[0])
+#             std_errors.append(model.bse[0])
+#             ci = model.conf_int().iloc[0]
+#             confidence_intervals.append((ci[0], ci[1]))
+
+#         # t_stats_row = pd.DataFrame([t_stats], columns=[time_series_diff[quant_intan_col].min(), time_series_diff[quant_intan_col].max()])
+#         std_errors_row = pd.DataFrame([std_errors], columns=[time_series_diff[quant_intan_col].min(), time_series_diff[quant_intan_col].max()])
+
+#         pivot_df_percent = pivot_df * 100
+#         # pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
+
+#         ######################
+#         # Calculating t-stats (Weighted)
+#         ######################
+
+#         pivot_weighted_t_stat = monthly_weighted_avg_returns.pivot_table(values=f'weighted_{col}', index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
+#         pivot_weighted_t_stat['ret_diff'] = pivot_weighted_t_stat[1] - pivot_weighted_t_stat[quant_dlev]
+#         time_series_weighted_diff = pivot_weighted_t_stat[['year_month', quant_intan_col, 'ret_diff']]
+
+#         # Dictionary to store regression results
+#         weighted_t_stats = []
+
+#         # Loop through first and last quant_intan values and perform the regression
+#         for quant_intan_value in [time_series_weighted_diff[quant_intan_col].min(), time_series_weighted_diff[quant_intan_col].max()]:
+#             df_filtered_weighted = time_series_weighted_diff[time_series_weighted_diff[quant_intan_col] == quant_intan_value]
+#             model_weighted = regress_on_constant(df_filtered_weighted)
+#             weighted_t_stats.append(model_weighted.tvalues[0]) 
+
+#         weighted_t_stats_row = pd.DataFrame([weighted_t_stats], columns=[time_series_weighted_diff[quant_intan_col].min(), time_series_weighted_diff[quant_intan_col].max()])
+
+#         pivot_weighted_df_percent = pivot_weighted_df * 100
+#         pivot_weighted_df_with_t_stats = pivot_weighted_df_percent._append(weighted_t_stats_row, ignore_index=True)
+
+#         # Extract the last row (t-stats) and the rows with coefficients
+#         t_stats_row = pivot_df_with_t_stats.iloc[-1]
+#         avr_rows = pivot_df_with_t_stats.iloc[:-1]
+#         weighted_t_stats_row = pivot_weighted_df_with_t_stats.iloc[-1]
+#         weighted_avr_rows = pivot_weighted_df_with_t_stats.iloc[:-1]
+
+#         # Add stars to t-stats
+#         # t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
+#         # weighted_t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in weighted_t_stats_row]
+        
+#         std_errors_with_stars = [f"({se:.2f}){add_stars(se)}" for se in std_errors]
+#         ci_strings = [f"[{ci[0]:.2f}, {ci[1]:.2f}]" for ci in confidence_intervals]
+
+#         # Create the rows for the table
+#         for idx, row in avr_rows.iterrows():
+#             quant_dlev_rows = row.name
+#             eqw_coeffs = [f"{row[col]:.2f}" for col in [avr_rows.columns[0], avr_rows.columns[-1]]]
+#             latex_output += f"{quant_dlev_rows} & " + " & ".join(eqw_coeffs) + " & & "
+
+#             # Data rows for weighted average
+#             wgt_row = weighted_avr_rows.loc[quant_dlev_rows]
+#             wgt_coeffs = [f"{wgt_row[col]:.2f}" for col in [weighted_avr_rows.columns[0], weighted_avr_rows.columns[-1]]]
+#             latex_output += " & ".join(wgt_coeffs) + " \\\\\n"
+
+#         # Standard errors row
+#         eqw_se_row = "(Std. Errors) & " + " & ".join(std_errors_with_stars[:2]) + " & & "
+#         wgt_se_row = " & ".join(std_errors_with_stars[2:]) + " \\\\\n"
+#         latex_output += eqw_se_row + wgt_se_row
+
+#         # Confidence intervals row
+#         eqw_ci_row = "(95% CI) & " + " & ".join(ci_strings[:2]) + " & & "
+#         wgt_ci_row = " & ".join(ci_strings[2:]) + " \\\\\n"
+#         latex_output += eqw_ci_row + wgt_ci_row
+
+#         # # T-statistics row
+#         # eqw_t_stats_row = "(t-statistics) & " + " & ".join([t_stats_with_stars[0], t_stats_with_stars[-1]]) + " & & "
+#         # wgt_t_stats_row = " & ".join([weighted_t_stats_with_stars[0], weighted_t_stats_with_stars[-1]]) + " \\\\\n"
+#         # latex_output += eqw_t_stats_row + wgt_t_stats_row
+
+#         latex_output += "\\midrule\n"
+
+#     latex_output += """
+#     \\bottomrule
+#     \\end{tabular*}
+#     \\caption{}
+#     \\label{table:comparison}
+#     \\end{table}
+#     """
+    
+#     create_latex_table_file(latex_output, filename)
+
+    
+#     latex_output = """
+
+# \\begin{table}
+# \\centering
+# \\small
+# \\setlength{\\tabcolsep}{3pt} % Adjust horizontal spacing
+# \\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{3}{c}l*{3}{c}}
+# \\toprule
+# \\multicolumn{7}{c}{Intangible/assets portfolio} \\\\
+# \\cmidrule(r){2-4} \\cmidrule(l){5-7}
+# Leverage & \\multicolumn{3}{c}{Equal-weighted} & & \\multicolumn{3}{c}{Value-weighted} \\\\
+# \\cmidrule(r){2-4} \\cmidrule(l){5-7}
+# change portfolio & 1 (Lowest) & 2 & 3 (Highest) & & 1 (Lowest) & 2 & 3 (Highest) \\\\
+# \\midrule
+# """
+
+#     for idx, col in enumerate(columns_to_process):
+#         # Equal-weighted average returns
+#         monthly_avg_returns = filtered_grouped[col].mean().reset_index()
+
+#         # Weighted average returns
+#         monthly_weighted_avg_returns = filtered_grouped.apply(lambda x: (x[col] * x['me']).sum() / x['me'].sum()).reset_index(name=f'weighted_{col}')
+        
+#         # Compute the Average Across All Months for equal-weighted
+#         overall_avg_returns = monthly_avg_returns.groupby([quant_intan_col, quant_dlev_col])[col].mean().reset_index()
+
+#         # Compute the Average Across All Months for weighted average
+#         overall_weighted_avg_returns = monthly_weighted_avg_returns.groupby([quant_intan_col, quant_dlev_col])[f'weighted_{col}'].mean().reset_index()
+
+#         # Pivot the DataFrame to get the correct format for LaTeX
+#         pivot_df = overall_avg_returns.pivot(index=quant_dlev_col, columns=quant_intan_col, values=col)
+#         pivot_weighted_df = overall_weighted_avg_returns.pivot(index=quant_dlev_col, columns=quant_intan_col, values=f'weighted_{col}')
+
+#         # Calculate the difference between the first and fifth rows
+#         difference_row = pivot_df.iloc[0] - pivot_df.iloc[quant_dlev-1]
+#         difference_row.name = f'1-{quant_dlev} Difference'
+
+#         weighted_difference_row = pivot_weighted_df.iloc[0] - pivot_weighted_df.iloc[quant_dlev-1]
+#         weighted_difference_row.name = f'1-{quant_dlev} Difference'
+
+#         # Append the difference row to the pivoted DataFrame
+#         pivot_df = pivot_df._append(difference_row)
+#         pivot_weighted_df = pivot_weighted_df._append(weighted_difference_row)
+
+#         ######################
+#         # Calculating t-stats (Equal-weighted)
+#         ######################
+
+#         pivot_t_stat = monthly_avg_returns.pivot_table(values=col, index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
+#         pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
+#         time_series_diff = pivot_t_stat[['year_month', quant_intan_col, 'ret_diff']]
+
+#         # Dictionary to store regression results
+#         t_stats = []
+
+#         # Loop through each quant_intan value and perform the regression
+#         for quant_intan_value in time_series_diff[quant_intan_col].unique():
+#             df_filtered = time_series_diff[time_series_diff[quant_intan_col] == quant_intan_value]
+#             model = regress_on_constant(df_filtered)
+#             t_stats.append(model.tvalues[0]) 
+
+#         t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_intan_col].unique())
+
+#         pivot_df_percent = pivot_df * 100
+#         pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
+
+#         ######################
+#         # Calculating t-stats (Weighted)
+#         ######################
+
+#         pivot_weighted_t_stat = monthly_weighted_avg_returns.pivot_table(values=f'weighted_{col}', index=['year_month', quant_intan_col], columns=quant_dlev_col).reset_index()
+#         pivot_weighted_t_stat['ret_diff'] = pivot_weighted_t_stat[1] - pivot_weighted_t_stat[quant_dlev]
+#         time_series_weighted_diff = pivot_weighted_t_stat[['year_month', quant_intan_col, 'ret_diff']]
+
+#         # Dictionary to store regression results
+#         weighted_t_stats = []
+
+#         # Loop through each quant_intan value and perform the regression
+#         for quant_intan_value in time_series_weighted_diff[quant_intan_col].unique():
+#             df_filtered_weighted = time_series_weighted_diff[time_series_weighted_diff[quant_intan_col] == quant_intan_value]
+#             model_weighted = regress_on_constant(df_filtered_weighted)
+#             weighted_t_stats.append(model_weighted.tvalues[0]) 
+
+#         weighted_t_stats_row = pd.DataFrame([weighted_t_stats], columns=time_series_weighted_diff[quant_intan_col].unique())
+
+#         pivot_weighted_df_percent = pivot_weighted_df * 100
+#         pivot_weighted_df_with_t_stats = pivot_weighted_df_percent._append(weighted_t_stats_row, ignore_index=True)
+
+#         # Extract the last row (t-stats) and the rows with coefficients
+#         t_stats_row = pivot_df_with_t_stats.iloc[-1]
+#         avr_rows = pivot_df_with_t_stats.iloc[:-1]
+#         weighted_t_stats_row = pivot_weighted_df_with_t_stats.iloc[-1]
+#         weighted_avr_rows = pivot_weighted_df_with_t_stats.iloc[:-1]
+
+#         # Add stars to t-stats
+#         t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
+#         weighted_t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in weighted_t_stats_row]
+
+#         # Create the rows for the table
+#         for idx, row in avr_rows.iterrows():
+#             quant_dlev_rows = row.name
+#             eqw_coeffs = [f"{row[col]:.2f}" for col in avr_rows.columns]
+#             latex_output += f"{quant_dlev_rows} & " + " & ".join(eqw_coeffs) + " & & "
+
+#             # Data rows for weighted average
+#             wgt_row = weighted_avr_rows.loc[quant_dlev_rows]
+#             wgt_coeffs = [f"{wgt_row[col]:.2f}" for col in weighted_avr_rows.columns]
+#             latex_output += " & ".join(wgt_coeffs) + " \\\\\n"
+
+#         # T-statistics row
+#         eqw_t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " & & "
+#         wgt_t_stats_row = " & ".join(weighted_t_stats_with_stars) + " \\\\\n"
+#         latex_output += eqw_t_stats_row + wgt_t_stats_row
+
+#         latex_output += "\\midrule\n"
+
+#     latex_output += """
+# \\bottomrule
+# \\end{tabular*}
+# \\caption{}
+# \\label{table:comparison}
+# \\end{table}
+# """
+#     create_latex_table_file(latex_output, filename)
     
 
 
@@ -518,8 +857,8 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, quant_pd, filen
     quant_lev_col = f'lev_{quant_lev}'
     quant_pd_col = f'pd_{quant_pd}'
     
-    df_subsample = df_copy[(df_copy[quant_pd_col] == quant_pd) & (df_copy[quant_intan_col] == quant_intan)]
-    # df_subsample = df_copy[df_copy[quant_pd_col] == 1]
+    # df_subsample = df_copy[(df_copy[quant_pd_col] == quant_pd) & (df_copy[quant_intan_col] == quant_intan)]
+    df_subsample = df_copy[df_copy[quant_intan_col] == 1]
     # df_subsample = df_copy
 
     grouped = df_subsample.groupby(['year_month', quant_lev_col, quant_dlev_col])
@@ -538,14 +877,14 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, quant_pd, filen
     # Re-group if necessary for further processing
     filtered_grouped = filtered_df.groupby(['year_month', quant_lev_col, quant_dlev_col])
 
-    columns_to_process = ['ret_lead1', 'ret_lead2', 'ret_lead3']
+    columns_to_process = ['ret_lead1', 'ret_lead2']
     
     latex_output = """
 
 \\begin{table}
 \\centering
-\\small
-\\setlength{\\tabcolsep}{0.5pt} % Adjust horizontal spacing
+\\scriptsize
+\\setlength{\\tabcolsep}{0.7pt} % Adjust horizontal spacing
 \\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{5}{c}l*{5}{c}}
 \\toprule
 \\multicolumn{7}{c}{Leverage portfolios} \\\\
@@ -577,6 +916,18 @@ change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4
         pivot_df = pivot_df._append(difference_row)
         pivot_weighted_df = pivot_weighted_df._append(weighted_difference_row)
 
+        ######################
+        # Calculating std errors and CIs (Equal-weighted)
+        ######################
+
+        pivot_stat = monthly_avg_returns.pivot_table(values=col, index=['year_month', quant_lev_col], columns=quant_dlev_col).reset_index()
+        pivot_stat['ret_diff'] = pivot_stat[1] - pivot_stat[quant_dlev]
+        time_series_diff = pivot_stat[['year_month', quant_lev_col, 'ret_diff']]
+
+        std_errors = []
+        confidence_intervals = []
+        p_values = []
+        
         pivot_t_stat = monthly_avg_returns.pivot_table(values=col, index=['year_month', quant_lev_col], columns=quant_dlev_col).reset_index()
         pivot_t_stat['ret_diff'] = pivot_t_stat[1] - pivot_t_stat[quant_dlev]
         time_series_diff = pivot_t_stat[['year_month', quant_lev_col, 'ret_diff']]
@@ -587,23 +938,42 @@ change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4
             df_filtered = time_series_diff[time_series_diff[quant_lev_col] == quant_lev_value]
             model = regress_on_constant(df_filtered)
             t_stats.append(model.tvalues[0]) 
-
+            std_errors.append(model.bse[0]*100)
+            ci = model.conf_int().iloc[0]*100
+            confidence_intervals.append((ci[0], ci[1]))
+            p_values.append(model.pvalues[0])
+            
         t_stats_row = pd.DataFrame([t_stats], columns=time_series_diff[quant_lev_col].unique())
 
         pivot_df_percent = pivot_df * 100
         pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
 
+        ######################
+        # Calculating std errors and CIs (Weighted)
+        ######################
+
+        pivot_weighted_stat = monthly_weighted_avg_returns.pivot_table(values=f'weighted_{col}', index=['year_month', quant_lev_col], columns=quant_dlev_col).reset_index()
+        pivot_weighted_stat['ret_diff'] = pivot_weighted_stat[1] - pivot_weighted_stat[quant_dlev]
+        time_series_weighted_diff = pivot_weighted_stat[['year_month', quant_lev_col, 'ret_diff']]
+
+        weighted_std_errors = []
+        weighted_confidence_intervals = []
+        weighted_p_values = []
+        weighted_t_stats = []
+        
         pivot_weighted_t_stat = monthly_weighted_avg_returns.pivot_table(values=f'weighted_{col}', index=['year_month', quant_lev_col], columns=quant_dlev_col).reset_index()
         pivot_weighted_t_stat['ret_diff'] = pivot_weighted_t_stat[1] - pivot_weighted_t_stat[quant_dlev]
         time_series_weighted_diff = pivot_weighted_t_stat[['year_month', quant_lev_col, 'ret_diff']]
-
-        weighted_t_stats = []
 
         for quant_lev_value in time_series_weighted_diff[quant_lev_col].unique():
             df_filtered_weighted = time_series_weighted_diff[time_series_weighted_diff[quant_lev_col] == quant_lev_value]
             model_weighted = regress_on_constant(df_filtered_weighted)
             weighted_t_stats.append(model_weighted.tvalues[0]) 
-
+            weighted_std_errors.append(model_weighted.bse[0]*100)
+            weighted_ci = model_weighted.conf_int().iloc[0]*100
+            weighted_confidence_intervals.append((weighted_ci[0], weighted_ci[1]))
+            weighted_p_values.append(model_weighted.pvalues[0])
+            
         weighted_t_stats_row = pd.DataFrame([weighted_t_stats], columns=time_series_weighted_diff[quant_lev_col].unique())
 
         pivot_weighted_df_percent = pivot_weighted_df * 100
@@ -613,6 +983,12 @@ change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4
         avr_rows = pivot_df_with_t_stats.iloc[:-1]
         weighted_t_stats_row = pivot_weighted_df_with_t_stats.iloc[-1]
         weighted_avr_rows = pivot_weighted_df_with_t_stats.iloc[:-1]
+
+        # Add stars based on p-values
+        std_errors_with_stars = [f"({se:.2f}){add_stars(pval)}" for se, pval in zip(std_errors, p_values)]
+        weighted_std_errors_with_stars = [f"({se:.2f}){add_stars(pval)}" for se, pval in zip(weighted_std_errors, weighted_p_values)]
+        ci_strings = [f"[{ci[0]:.2f}, {ci[1]:.2f}]" for ci in confidence_intervals]
+        weighted_ci_strings = [f"[{ci[0]:.2f}, {ci[1]:.2f}]" for ci in weighted_confidence_intervals]
 
         t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in t_stats_row]
         weighted_t_stats_with_stars = [f"({t_stat:.2f}){add_stars(t_stat)}" for t_stat in weighted_t_stats_row]
@@ -626,10 +1002,21 @@ change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4
             wgt_coeffs = [f"{wgt_row[col]:.2f}" for col in weighted_avr_rows.columns]
             latex_output += " & ".join(wgt_coeffs) + " \\\\\n"
 
+        # T-statistics row
         eqw_t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " & & "
         wgt_t_stats_row = " & ".join(weighted_t_stats_with_stars) + " \\\\\n"
         latex_output += eqw_t_stats_row + wgt_t_stats_row
 
+        # Standard errors row
+        eqw_se_row = "(Std. Errors) & " + " & ".join(std_errors_with_stars) + " & & "
+        wgt_se_row = " & ".join(weighted_std_errors_with_stars) + " \\\\\n"
+        latex_output += eqw_se_row + wgt_se_row
+
+        # Confidence intervals row
+        eqw_ci_row = "(95\% CI) & " + " & ".join(ci_strings) + " & & "
+        wgt_ci_row = " & ".join(weighted_ci_strings) + " \\\\\n"
+        latex_output += eqw_ci_row + wgt_ci_row
+        
         latex_output += "\\midrule\n"
 
     latex_output += """
