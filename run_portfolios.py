@@ -25,7 +25,7 @@ df.set_index(['GVKEY', 'year_month'], inplace=True)
 #######################################
 quant_dlev = 5
 quant_intan = 3
-quant_lev = 5
+quant_lev = 4
 quant_kkr = 5
 quant_pd = 5 # probability of default (Merton model)
 intan_subsample = 1 # 1 for low intangibles, quant_intan for high.
