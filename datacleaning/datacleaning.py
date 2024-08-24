@@ -58,7 +58,9 @@ def load_fm(redo = False, origin = "pickle"):
             print("Reading CRSP data")
             crsp = pd.read_pickle('../data/pickle/crsp_full.pkl')
             print("Reading Fama-French factors")
-            ff = pd.read_pickle('../data/pickle/F-F_Research_Data_Factors.pkl')
+            # ff = pd.read_pickle('../data/pickle/F-F_Research_Data_Factors.pkl')
+            ff = pd.read_pickle('../data/pickle/F-F_Research_Data_5_Factors_2x3.pkl')
+            mom = pd.read_pickle('../data/pickle/F-F_Research_Data_Factors.pkl')
             print("Reading Peters and Taylor intangible capital data")
             pt = pd.read_pickle('../data/pickle/peterstaylor.pkl')
             print("Reading knowledge capital risk data")
@@ -67,7 +69,7 @@ def load_fm(redo = False, origin = "pickle"):
             raise ValueError("Invalid origin. Please use 'csv' or 'pickle' as origin.")
 
         comp_intan = merge_comp_intan_epk(df, intan)
-        cc = merge_crsp_comp(comp_intan, crsp, ff) # also merges with Fama-French factors
+        cc = merge_crsp_comp(comp_intan, crsp, ff, mom) # also merges with Fama-French factors
         cc_pt = merge_pt(cc, pt)
         betas = calc_beta(cc_pt)
         df_fm = prep_fm(cc_pt, betas, kkr)
@@ -78,9 +80,28 @@ def load_fm(redo = False, origin = "pickle"):
         df_fm.to_feather('../data/feather/df_fm.feather')
     else:
         df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
+        # DON'T FORGET TO FIX THE FF LOADING IN THE load_fm = true ABOVE
+        mom = pd.read_csv('../data/csv/F-F_Momentum_Factor.CSV') # from Kenneth French's website
+        mom.to_pickle("../data/pickle/F-F_Momentum_Factor.pkl")
+        ff = pd.read_pickle('../data/pickle/F-F_Research_Data_5_Factors_2x3.pkl')
+        df_fm.drop(columns = ['mkt_rf', 'smb', 'hml', 'rf'], inplace = True)
+        ff = (ff
+              .assign(date = pd.to_datetime(ff['date'], format='%Y%m'))
+              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+              .rename(columns = {'Mkt-RF': 'mkt_rf', 'SMB': 'smb', 'HML': 'hml', 'CMA': 'cma', 'RMW': 'rmw', 'RF': 'rf'})
+              .drop(columns = ['date']))
+        mom = (mom
+              .assign(date = pd.to_datetime(mom['date'], format='%Y%m'))
+              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+              .rename(columns = {'Mom': 'mom'})
+              .drop(columns = ['date']))
+        
+        df_fm = df_fm.merge(ff, how = 'left', on = 'year_month')
+        df_fm = df_fm.merge(mom, how = 'left', on = 'year_month')
+        
         # df_fm = (df_fm
         #          .assign(intan_at = lambda x: x['intan_epk'] / x['atq']))
-        
+        df_fm.to_feather('../data/feather/df_fm.feather')
     return df_fm
 
 @announce_execution
@@ -142,13 +163,19 @@ def merge_comp_intan_epk(df, intan):
     return compust_pre_merge
 
 @announce_execution
-def merge_crsp_comp(df, crsp, ff):
+def merge_crsp_comp(df, crsp, ff, mom):
     df_copy = df.copy()
     # mkt_rf = ff[['date', 'Mkt-RF']]
     mkt_rf = (ff
             .assign(date = pd.to_datetime(ff['date'], format='%Y%m'))
             .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-            .rename(columns = {'Mkt-RF': 'mkt_rf', 'SMB': 'smb', 'HML': 'hml', 'RF': 'rf'})
+            .rename(columns = {'Mkt-RF': 'mkt_rf', 'SMB': 'smb', 'HML': 'hml', 'RF': 'rf', 'CMA': 'cma', 'RMW': 'rmw'})
+            .drop(columns = ['date']))
+    
+    mom = (mom
+            .assign(date = pd.to_datetime(mom['date'], format='%Y%m'))
+            .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+            .rename(columns = {'Mom': 'mom'})
             .drop(columns = ['date']))
 
     link_permno_gvkey = pd.read_csv('../data/csv/link_permno_gvkey.csv')
@@ -195,6 +222,7 @@ def merge_crsp_comp(df, crsp, ff):
 
 
     crsp_pre_merge = (pd.merge(crsp_pre_merge, mkt_rf, how = 'left', on = 'year_month'))
+    crsp_pre_merge = (pd.merge(crsp_pre_merge, mom, how = 'left', on = 'year_month'))
     # crsp_pre_merge.shape
 
     # duplicates = compust[compust.duplicated(subset=['year_quarter', 'GVKEY'], keep=False)]
