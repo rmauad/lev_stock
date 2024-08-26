@@ -80,28 +80,7 @@ def load_fm(redo = False, origin = "pickle"):
         df_fm.to_feather('../data/feather/df_fm.feather')
     else:
         df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
-        # DON'T FORGET TO FIX THE FF LOADING IN THE load_fm = true ABOVE
-        mom = pd.read_csv('../data/csv/F-F_Momentum_Factor.CSV') # from Kenneth French's website
-        mom.to_pickle("../data/pickle/F-F_Momentum_Factor.pkl")
-        ff = pd.read_pickle('../data/pickle/F-F_Research_Data_5_Factors_2x3.pkl')
-        df_fm.drop(columns = ['mkt_rf', 'smb', 'hml', 'rf'], inplace = True)
-        ff = (ff
-              .assign(date = pd.to_datetime(ff['date'], format='%Y%m'))
-              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-              .rename(columns = {'Mkt-RF': 'mkt_rf', 'SMB': 'smb', 'HML': 'hml', 'CMA': 'cma', 'RMW': 'rmw', 'RF': 'rf'})
-              .drop(columns = ['date']))
-        mom = (mom
-              .assign(date = pd.to_datetime(mom['date'], format='%Y%m'))
-              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-              .rename(columns = {'Mom': 'mom'})
-              .drop(columns = ['date']))
-        
-        df_fm = df_fm.merge(ff, how = 'left', on = 'year_month')
-        df_fm = df_fm.merge(mom, how = 'left', on = 'year_month')
-        
-        # df_fm = (df_fm
-        #          .assign(intan_at = lambda x: x['intan_epk'] / x['atq']))
-        df_fm.to_feather('../data/feather/df_fm.feather')
+
     return df_fm
 
 @announce_execution
