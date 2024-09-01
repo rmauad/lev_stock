@@ -80,8 +80,34 @@ def load_fm(redo = False, origin = "pickle"):
         df_fm.to_feather('../data/feather/df_fm.feather')
     else:
         df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
+        
+        # port_ff25 = pd.read_pickle("../data/pickle/25_Portfolios_5x5.pkl")
+        port_ff6 = pd.read_pickle("../data/pickle/6_Portfolios_2x3.pkl")
 
-    return df_fm
+        # # port_ff25 = (port_ff25
+        # #              .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
+        # #              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+        # #              .drop(columns = ['date'])
+        # # )
+        
+        port_ff6 = (port_ff6
+                    .assign(date = pd.to_datetime(port_ff6['date'], format='%Y%m'))
+                    .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+                    .assign(year_month = lambda x: x['year_month'].dt.to_timestamp())
+                    .drop(columns = ['date'])
+        )
+    
+        # Pivot this by melting the dataframe
+        port_ff6_pivot = (port_ff6
+                          .melt(id_vars = ['year_month'], var_name = 'port', value_name = 'ret')
+                          .assign(port = lambda x: x['port'].str.replace(' ', ''))
+        )
+        
+        # Replace string identifiers with numbers from 1 to 6
+        port_ff6_pivot['port_id'] = pd.factorize(port_ff6_pivot['port'])[0] + 1
+        port_ff6_pivot = port_ff6_pivot.drop(columns = ['port'])
+        
+    return df_fm, port_ff6_pivot
 
 @announce_execution
 def merge_comp_intan_epk(df, intan):
@@ -306,6 +332,7 @@ def prep_fm(df, betas, kkr):
     df_copy['intan_epk_at'] = df_copy['intan_epk'] / df_copy['atq']
     df_copy['roe'] = df_copy['niq'] / df_copy['ceqq']
     df_copy['roa'] = df_copy['niq'] / df_copy['atq']
+    df_copy['ceqq_lag3'] = df_copy.groupby('GVKEY')['ceqq'].shift(3) #lagging book value of equity by one quarter to compute bm
 
 
     # Change book-to-market ratio
@@ -313,7 +340,7 @@ def prep_fm(df, betas, kkr):
         #.assign(ceqq_lag1 = df.groupby('GVKEY')['ceqq'].shift(1))
         .assign(me = (np.abs(df_copy['PRC'])*df_copy['SHROUT'])/1000000))# convert to billions
     df_copy = (df_copy
-        .assign(bm = df_copy['ceqq'] / (df_copy['me']*1000)) #ceqq is in millions and me is in billions
+        .assign(bm = df_copy['ceqq_lag3'] / (df_copy['me']*1000)) #ceqq is in millions and me is in billions
         .assign(ln_ceqq = np.log(df_copy['ceqq']))
         .assign(ln_me = np.log(df_copy['me']))      
         .assign(ln_at = np.log(df_copy['atq']))

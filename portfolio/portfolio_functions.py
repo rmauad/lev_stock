@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from tabulate import tabulate
 from linearmodels.panel.model import FamaMacBeth
+from statsmodels.regression.rolling import RollingOLS
 import statsmodels.api as sm
 import sys
 sys.path.append('code/lev_stock/portfolio/')
@@ -57,17 +58,25 @@ def add_stars(tstat):
     else:
         return ''
     
-def fm_ret_lev(df):
+def fm_ret_lev(df, quant_intan, subsample, filename):
     df_copy = df.copy()
     df_copy.reset_index(inplace=True)
     df_copy['year_month'] = df_copy['year_month'].astype(str)
     df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m')
+    quant_intan_col = f'intan_at_{quant_intan}'
     
+    if subsample == 'hint':
+        df_subsample = df_copy[df_copy[quant_intan_col] == quant_intan]
+    elif subsample == 'lint':
+        df_subsample = df_copy[df_copy[quant_intan_col] == 1]
+    else:
+        df_subsample = df_copy
+        
     # df_copy['year_month'] = df_copy['year_month'].to_timestamp()
     # df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y%m').dt.to_period('M').to_timestamp()
     # df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y%m')
 
-    df_copy.set_index(['GVKEY', 'year_month'], inplace=True)
+    df_subsample.set_index(['GVKEY', 'year_month'], inplace=True)
     
     ###################################
     # Running Fama MacBeth regressions
@@ -76,13 +85,17 @@ def fm_ret_lev(df):
     # df_copy['dlevXintan_quant'] = df_copy['dlev'] * df_copy['quant_intan_dummy']
     # df_copy['indust_dummy'] = df_copy['ff_indust'] == 10
     # df_copy['dlevXindust_dummy'] = df_copy['dlev'] * df_copy['indust_dummy']
+    df_subsample['dummy_intan'] = df_subsample[quant_intan_col] == quant_intan
+    df_subsample['dlevXdummy_intan'] = df_subsample['dlev'] * df_subsample['dummy_intan']
     
-    dep_vars = ['RET_lead1', 'ret_2mo_lead1', 'ret_3mo_lead1']
+    # dep_vars = ['RET_lead1', 'ret_2mo_lead1', 'ret_3mo_lead1']
+    dep_vars = ['ret_lead1', 'ret_lead2']
     # dep = df_clean_no_na['ret_2mo_lead1']*100
     # indep_vars = ['dlev', 'dlevXindust_dummy', 'indust_dummy', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     
     indep_vars = ['dlev', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
-    
+    # indep_vars = ['dlev', 'dlevXdummy_intan', 'dummy_intan', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+
     # indep_vars = ['d_debt_at', 'debt_at', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'lint', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     #indep_vars = ['d_ln_debt_at', 'ln_ceqq', 'roa', 'RET', 'beta']
@@ -100,8 +113,11 @@ def fm_ret_lev(df):
         'd_ln_debt_at': 'Debt/assets log change',
         'debt_at': 'Debt/assets',
         'd_ln_lev': 'Leverage log change',
-        'd_lev': 'Leverage Change',
+        'dlev': 'Leverage Change',
         'lev': 'Leverage',
+        'mkt_rf': 'Market Risk Premium',
+        'smb': 'SMB',
+        'hml': 'HML',
         'dummyXd_debt_at': 'High intan/at X Leverage Change',
         'dummyXdebt_at': 'High intan/at X Leverage',    
         'hlev': 'High Leverage dummy',    
@@ -127,7 +143,7 @@ def fm_ret_lev(df):
     r_squared = {}
 
     for dep_var in dep_vars:
-        df_clean_no_na = df_copy.dropna(subset=[dep_var] + indep_vars)
+        df_clean_no_na = df_subsample.dropna(subset=[dep_var] + indep_vars)
         dep = df_clean_no_na[dep_var] * 100
         indep = df_clean_no_na[indep_vars]
         mod = FamaMacBeth(dep, indep)
@@ -162,14 +178,40 @@ def fm_ret_lev(df):
         ['R-squared'] + [round(r_squared[dep_var], 5) for dep_var in dep_vars]
     ]
 
-    # Combine all rows
+    # Generate LaTeX table with custom header
+    custom_header = r"""
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\hline
+% Independent variables 
+& \multicolumn{2}{c}{Stock return (\%)} \\
+\cline{2-3}
+             & 1st month                      & 2nd month                     \\
+\hline
+"""
+
+    # # Combine all rows
     all_rows = rows + obs_firms_data
 
-    # Generate LaTeX table
-    latex_table = tabulate(all_rows, headers=['Variable'] + dep_vars, tablefmt='latex_raw', showindex=False)
+    # # Generate LaTeX table
+    # latex_table = tabulate(all_rows, headers=['Variable'] + dep_vars, tablefmt='latex_raw', showindex=False)
+
+
+    # Generate the main content of the table
+    table_content = tabulate(all_rows, tablefmt='latex_raw', showindex=False)
+    
+    # Remove the \begin{tabular} and \hline from the generated content
+    table_content = table_content.replace(r'\begin{tabular}{l' + 'l'*len(dep_vars) + '}', '')
+    table_content = table_content.replace(r'\hline', '', 1)
+    
+    # Combine custom header with table content
+    full_latex_table = custom_header + table_content + "\n" + r"\end{table}"
 
     # Print LaTeX table
-    print(latex_table)
+    print(full_latex_table)
+    create_latex_table_file(full_latex_table, filename)
+    
 
     #######################################################
     # To remove R2, replace the above with the following:
@@ -247,7 +289,475 @@ def create_latex_table_file(latex_table, filename):
     with open(filepath, "w") as tex_file:
         tex_file.write(latex_table)
 
+def idl_factor(df, quant_intan, quant_dlev, quant_size, quant_bm):
+    df_copy = df.copy()
+    quant_intan_col = f'intan_at_{quant_intan}'
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    quant_size_col = f'size_{quant_size}'
+    quant_bm_col = f'bm_{quant_bm}'
+    
+    ##########################################################################
+    # Create a new asset pricing factor (based on intangible/assets and dlev)
+    ##########################################################################
+    grouped = df_copy.groupby(['year_month', quant_intan_col, quant_dlev_col, quant_size_col])
+    # grouped = df_copy.groupby(['year_month', quant_size_col])
+    avg_returns = grouped['ret_lead1'].mean().reset_index()
+    
+    # Group by year_month and calculate the averages for each condition    
+    monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
+        'avg_hint_ldl_s': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),
+        'avg_hint_ldl_b': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean(),
+        
+        'avg_lint_hdl_s': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),
+        'avg_lint_hdl_b': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean()
+    }))
+    
+    # monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
+    #     'avg_hint_ldl_h': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == quant_bm)]['ret_lead1'].mean(),
+    #     'avg_hint_ldl_m': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 2)]['ret_lead1'].mean(),
+    #     'avg_hint_ldl_l': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 1)]['ret_lead1'].mean(),
+                
+    #     'avg_lint_hdl_h': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == quant_bm)]['ret_lead1'].mean(),
+    #     'avg_lint_hdl_m': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 2)]['ret_lead1'].mean(),
+    #     'avg_lint_hdl_l': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 1)]['ret_lead1'].mean()
+    # }))
+        
+    # monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
+    #     'small': x[(x[quant_size_col] == 1)]['ret_lead1'].mean(),
+    #     'big': x[(x[quant_size_col] == quant_size)]['ret_lead1'].mean()
+    # }))
+    
+    # Calculate the difference
+    # monthly_avg_returns['difference'] = monthly_avg_returns['small'] - monthly_avg_returns['big']
+    monthly_avg_returns['difference'] = ((monthly_avg_returns['avg_hint_ldl_s'] + monthly_avg_returns['avg_hint_ldl_b'])/2) - ((monthly_avg_returns['avg_lint_hdl_s'] + monthly_avg_returns['avg_lint_hdl_b'])/2)
+    # monthly_avg_returns['difference'] = ((monthly_avg_returns['avg_lint_hdl_h'] + monthly_avg_returns['avg_lint_hdl_m'] + monthly_avg_returns['avg_hint_ldl_l'])/3) - ((monthly_avg_returns['avg_lint_hdl_h'] + monthly_avg_returns['avg_lint_hdl_m'] + monthly_avg_returns['avg_lint_hdl_l'])/3)
 
+
+    # Create the final time series
+    time_series = monthly_avg_returns['difference'].reset_index()
+    time_series.columns = ['year_month', 'idl']
+    
+    df_factor = pd.merge(df_copy, time_series, on='year_month', how='left')
+    df_factor['idl'] = df_factor['idl']*100 # Convert to percentage (and make it consistent with the other factors)    
+    
+    return df_factor
+
+
+# def time_series_regression(df, firm_id):
+#     # Filter data for a single firm
+#     firm_data = df[df['GVKEY'] == firm_id]
+    
+#     # Prepare X and y
+#     X = sm.add_constant(firm_data[['mkt_rf', 'hml', 'smb']])
+#     y = firm_data['ret_lead1']*100  # Convert to percentage
+    
+#     # Run time-series regression
+#     model = sm.OLS(y, X).fit()
+    
+#     return pd.Series({'firm_id': firm_id, 'const': model.params['const'], 
+#                       'mkt_rf_beta': model.params['mkt_rf'], 
+#                       'hml_beta': model.params['hml'], 
+#                       'smb_beta': model.params['smb']})
+
+
+# def fama_macbeth_regression(df):
+#     df = df.reset_index()
+#     # Get unique firm IDs
+#     firms = df['GVKEY'].unique()
+    
+#     # Run time-series regressions for each firm
+#     firm_betas = []
+#     for firm in firms:
+#         try:
+#             betas = time_series_regression(df, firm)
+#             firm_betas.append(betas)
+#         except:
+#             print(f"Regression failed for firm {firm}")
+    
+#     # Convert to DataFrame
+#     betas_df = pd.DataFrame(firm_betas)
+#     betas_df = betas_df.rename(columns={'const': 'alpha', 'mkt_rf': 'mkt_rf_beta', 'hml': 'hml_beta', 'smb': 'smb_beta'})
+    
+    
+#     # Second stage: cross-sectional regression
+#     # Here we would regress returns on the estimated betas
+#     # This part depends on how you want to structure your second stage
+    
+#     return betas_df
+
+
+# def second_stage_regression(df, betas):
+#     """
+#     Perform the second stage regression for a single time period.
+#     """
+#     returns = df['ret_lead1']*100  # Convert to percentage
+#     X = sm.add_constant(betas)
+#     y = returns
+#     model = sm.OLS(y, X).fit()
+#     return model.params
+
+
+# def fama_macbeth_second_stage(df, betas_df):
+#     """
+#     Perform the second stage of the Fama-MacBeth procedure.
+#     """
+#     # Merge returns with betas
+#     df = df.reset_index()
+#     returns_df = df[['GVKEY', 'ret_lead1']]*100  # Convert to percentage
+#     merged_df = returns_df.merge(betas_df, on='GVKEY', how='inner')
+    
+#     # Group by date
+#     grouped = merged_df.groupby('year_month')
+    
+#     # Run cross-sectional regressions for each time period
+#     results = []
+#     for date, group in grouped:
+#         try:
+#             params = second_stage_regression(group['ret_lead1'], 
+#                                              group[['mkt_rf_beta', 'hml_beta', 'smb_beta']], 
+#                                              date)
+#             results.append(params)
+#         except:
+#             print(f"Regression failed for date {date}")
+    
+#     # Convert results to DataFrame
+#     results_df = pd.DataFrame(results)
+    
+#     # Calculate means and standard errors
+#     means = results_df.mean()
+#     std_errors = results_df.std() / np.sqrt(len(results_df))
+#     t_stats = means / std_errors
+#     p_values = 2 * (1 - stats.t.cdf(abs(t_stats), df=len(results_df)-1))
+    
+#     # Combine results
+#     summary = pd.DataFrame({
+#         'Coefficient': means,
+#         'Std Error': std_errors,
+#         't-statistic': t_stats,
+#         'p-value': p_values
+#     })
+    
+#     return summary
+
+def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, window, port_ff, model_factor, filename):
+    df_copy = df.copy()
+    df_copy.reset_index(inplace=True)
+    df_copy['year_month'] = df_copy['year_month'].astype(str)
+    df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m')
+    # df_copy.set_index(['GVKEY', 'year_month'], inplace=True)
+    # df_copy = df_copy.set_index(['GVKEY', 'year_month'])
+    df_copy['const'] = 1 # Add a constant term    
+    quant_intan_col = f'intan_at_{quant_intan}'
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    quant_lev_col = f'lev_{quant_lev}'
+    quant_size_col = f'size_{quant_size}'
+    quant_bm_col = f'bm_{quant_bm}'
+    
+    ##########################################
+    # Change here to use different portfolios and factors
+    ##########################################
+    
+    portfolio_cols = ['year_month', quant_size_col, quant_intan_col, quant_dlev_col]
+    factors_list = ['idl', 'mkt_rf', 'hml', 'smb', 'mom', 'cma', 'rmw']
+    # portfolio_cols = ['year_month', quant_size_col, quant_bm_col]
+    # factors_list = ['mkt_rf', 'hml', 'smb']
+    
+    
+    ##########################################
+    
+    df_copy = (df_copy
+               .assign(ret_lead1_rf = df_copy['ret_lead1'] - (df_copy['rf']/100),
+                       ret_lead2_rf = df_copy['ret_lead2'] - (df_copy['rf']/100))
+    )
+    
+    factors = df_copy[['year_month', 'const'] + factors_list].drop_duplicates()
+    
+    ######################################################################################
+    # Creating the portfolio returns (3 intan x 5 dlev x 4 lev = 60 portfolios per period)
+    ######################################################################################
+    port_returns = df_copy.groupby(portfolio_cols)[['ret_lead1_rf', 'ret_lead2_rf']].mean().reset_index()
+    # port_returns = df_copy.groupby(['year_month', quant_size_col])[['ret_lead1_rf', 'ret_lead2_rf']].mean().reset_index()
+
+    #####################################
+    # UNCOMMENT HERE TO USE FF PORTFOLIOS
+    #####################################
+    
+    # port_ff = (port_ff
+    #            .assign(ret_lead1_rf = port_ff.groupby('port_id')['ret'].shift(-1))
+    #            )
+    
+    # df_port = port_ff.merge(factors, on=['year_month'], how='left')
+    # # df_port = (df_port
+    # #     .assign(const = lambda x: pd.to_numeric(x['const'], errors='coerce').astype('Int64'))
+    # # )
+    
+    # df_port = df_port.dropna(subset=factors_list)
+
+    #####################################
+    #####################################
+    
+    #####################################
+    # UNCOMMENT TO CREATE OWN PORTFOLIOS
+    #####################################
+    df_port = port_returns.merge(factors, on=['year_month'], how='inner')
+    # df_port['port_id'] = df_port[quant_dlev_col].astype(str)
+    # df_port['port_id'] = df_port[quant_intan_col].astype(str) + df_port[quant_dlev_col].astype(str) + df_port[quant_size_col].astype(str)
+    id_cols = [col for col in portfolio_cols if col != 'year_month']
+    df_port['port_id'] = df_port[id_cols].astype(str).agg(''.join, axis=1)
+    # df_port['port_id'] = df_port[quant_size_col].astype(str)
+    df_port['port_id'] = df_port['port_id'].astype('Int64')
+    
+    #####################################
+    #####################################
+    
+    df_betas = create_factor_betas(df_port, factors_list, window) # this creates the factor betas for each portfolio
+    df_returns = df_port[['port_id', 'year_month', 'ret_lead1_rf']]
+
+    # df_returns = df_port[['port_id', 'year_month', 'ret_lead1', 'ret_lead2']]
+    df_fm = df_returns.merge(df_betas, on=['port_id', 'year_month'], how='inner')
+    df_fm['const'] = 1
+    # df_fm = (df_fm
+    #     .assign(const = lambda x: pd.to_numeric(x['const'], errors='coerce').astype('Int64'))
+    # )
+    
+    df_fm.set_index(['port_id', 'year_month'], inplace=True)
+
+    dep_vars = ['ret_lead1_rf']
+
+    if model_factor == 'capm':
+        indep_vars = ['beta_idl', 'beta_mkt', 'const'] # CAPM
+    elif model_factor == 'ff3':
+        indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 3-factor
+    elif model_factor == 'cahart4':
+        indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'beta_mom', 'const'] # Cahart 4-factor
+    elif model_factor == 'ff5':
+        indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'beta_cma', 'beta_rmw', 'const'] # Fama-French 5-factor
+    else:
+        raise ValueError(f"Invalid model_factor: {model_factor}. Please choose from 'capm', 'ff3', 'cahart4', or 'ff5'.")
+
+    # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 5-factor
+
+
+    # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'const']
+    # indep_vars = ['beta_smb', 'const']
+
+
+    # indep_vars = ['beta_mkt', 'const']
+
+    # indep_vars = ['dlev', 'hml', 'smb', 'bm', 'roe', 'one_year_cum_return', 'RET']
+
+    # Create a dictionary for variable labels
+    variable_labels = {
+        'beta_idl': 'IDL',
+        'beta_mkt': 'Mkt-RF',
+        'beta_hml': 'HML',
+        'beta_smb': 'SMB',
+        'beta_cma': 'CMA',
+        'beta_rmw': 'RMW',
+        'beta_mom': 'MOM',
+        'const': 'Intercept'
+    }
+
+    results = {}
+    obs_counts = {}
+    port_counts = {}
+    r_squared = {}
+    
+    for dep_var in dep_vars:
+        df_clean_no_na = df_fm.dropna(subset=[dep_var] + indep_vars)
+        dep = df_clean_no_na[dep_var] * 100
+        indep = df_clean_no_na[indep_vars]
+        indep = indep.astype(float)
+        mod = FamaMacBeth(dep, indep)
+        res = mod.fit(cov_type='robust')
+        results[dep_var] = res
+        obs_counts[dep_var] = res.nobs
+        df_reset = df_clean_no_na.reset_index()
+        port_counts[dep_var] = df_reset['port_id'].nunique()
+        r_squared[dep_var] = res.rsquared_between
+
+    # Extract coefficients and t-stats into a DataFrame
+    data = {'Variable': indep_vars}
+    for dep_var, res in results.items():
+        coeffs = res.params.round(2).astype(str) + res.tstats.apply(add_stars)
+        tstats = res.tstats.round(2).astype(str)
+        data[f'{dep_var}_Coeff'] = coeffs
+        data[f'{dep_var}_t'] = tstats
+
+    dataframe = pd.DataFrame(data)
+    dataframe['Variable'] = dataframe['Variable'].map(variable_labels)
+
+    # Generate rows for coefficients and t-stats
+    rows = []
+    for _, row in dataframe.iterrows():
+        rows.append([row['Variable']] + [row[f'{dep_var}_Coeff'] for dep_var in dep_vars])
+        rows.append([''] + [f"({row[f'{dep_var}_t']})" for dep_var in dep_vars])
+
+    # Add rows for number of observations, number of unique firms, and R-squared
+    obs_firms_data = [
+        ['Observations'] + [obs_counts[dep_var] for dep_var in dep_vars],
+        ['Number of portfolios'] + [port_counts[dep_var] for dep_var in dep_vars],
+        ['R-squared'] + [round(r_squared[dep_var], 5) for dep_var in dep_vars]
+    ]
+
+    # Generate LaTeX table with custom header
+    custom_header = r"""
+\begin{table}[h!]
+\centering
+\begin{tabular}{lllll}
+\hline
+% Independent variables 
+% & \multicolumn{2}{c}{Stock return (\%)} \\
+% \cline{2-3}
+            & CAPM+
+             & FF3+           & Cahart4+    
+             & FF5+ \\
+\hline
+"""
+
+    # # Combine all rows
+    all_rows = rows + obs_firms_data
+
+    # # Generate LaTeX table
+    # latex_table = tabulate(all_rows, headers=['Variable'] + dep_vars, tablefmt='latex_raw', showindex=False)
+
+
+    # Generate the main content of the table
+    table_content = tabulate(all_rows, tablefmt='latex_raw', showindex=False)
+    
+    # Remove the \begin{tabular} and \hline from the generated content
+    table_content = table_content.replace(r'\begin{tabular}{l' + 'l'*len(dep_vars) + '}', '')
+    table_content = table_content.replace(r'\hline', '', 1)
+    
+    # Combine custom header with table content
+    full_latex_table = custom_header + table_content + "\n" + r"\end{table}"
+
+    # Print LaTeX table
+    print(full_latex_table)
+    create_latex_table_file(full_latex_table, filename)
+    
+
+def create_factor_betas(df, factors_list, window):
+    """
+    Create factor betas for each portfolio.
+    
+    Parameters:
+    df (DataFrame): The DataFrame containing the portfolios and factor returns.
+    window (int): The number of months to use in the rolling window.
+    
+    Returns:
+    DataFrame: A DataFrame containing the factor betas for each portfolio and time period.
+    """
+    # Ensure the DataFrame is sorted by port_id and year_month
+    df = df.sort_values(['port_id', 'year_month'])
+
+    # Create a list to store the factor betas
+    factor_betas = []
+
+    # Get the unique portfolio IDs
+    port_ids = df['port_id'].unique()
+
+    # Loop through each portfolio
+    for port_id in port_ids:
+        # Filter the DataFrame for the current portfolio
+        port_data = df[df['port_id'] == port_id].copy()
+        
+        # Ensure the data is sorted by date
+        port_data = port_data.sort_values('year_month')
+        
+        # Prepare the data for rolling regression
+        X = port_data[factors_list] # CHECK THIS (I THINK I SHOULD ONLY SELECT ONE FACTOR AT A TIME)
+        y = port_data['ret_lead1_rf'] * 100  # Convert to percentage
+        
+        # Perform rolling regression
+        model = RollingOLS(y, sm.add_constant(X), window=window)
+        results = model.fit()
+        
+        # Extract the parameters (betas)
+        betas = results.params.iloc[window-1:]  # Start from the window'th observation
+        
+        # Add portfolio ID and reset the index to get the date
+        betas['port_id'] = port_id
+        betas['year_month'] = port_data['year_month'].iloc[window-1:]
+        betas = betas.reset_index()
+
+        # Rename columns for clarity
+        betas = (betas
+                 .rename(columns={#'const': 'beta_const', 
+                                      'idl': 'beta_idl', 
+                                      'mkt_rf': 'beta_mkt', 
+                                      'hml': 'beta_hml', 
+                                      'smb': 'beta_smb',
+                                      'cma': 'beta_cma',
+                                      'rmw': 'beta_rmw',
+                                      'mom': 'beta_mom'
+                                      })
+                 .drop(columns='const')
+                 )
+        
+        # Append to the list
+        factor_betas.append(betas)
+
+    # Concatenate all the DataFrames in the list
+    factor_betas_df = pd.concat(factor_betas, ignore_index=True)
+    
+    # Take year_month from port_data considering the window
+    # factor_betas_df['year_month'] = port_data['year_month'].iloc[window-1:]
+    
+    # Ensure the year_month column is datetime
+    # factor_betas_df['year_month'] = pd.to_datetime(factor_betas_df['index'])
+    factor_betas_df = factor_betas_df.drop('index', axis=1)
+    
+    return factor_betas_df
+
+# def create_factor_betas(df, window):
+#     """
+#     Create factor betas for each portfolio.
+    
+#     Parameters:
+#     df (DataFrame): The DataFrame containing the portfolios and factor returns.
+#     window (int): The number of months to use in the rolling window.
+    
+#     Returns:
+#     DataFrame: A DataFrame containing the factor betas for each portfolio.
+#     """
+#     # Create a list to store the factor betas
+#     factor_betas = []
+    
+#     # Get the unique portfolio IDs
+#     port_ids = df['port_id'].unique()
+    
+#     # Create a list to store the factor betas for the current portfolio
+#     port_factor_betas = []
+    
+#     # Loop through each portfolio
+#     for port_id in port_ids:
+#         # Filter the DataFrame for the current portfolio
+#         port_data = df[df['port_id'] == port_id]
+        
+#         X = port_data[['const', 'idl', 'mkt_rf', 'hml', 'smb']]
+#         y = port_data['ret_lead1']*100  # Convert to percentage
+        
+#         model = RollingOLS(y, X, window=window)
+#         model = model.fit()
+#         port_factor_betas = model.params
+
+#         # Create a DataFrame with the factor betas for the current portfolio
+#         port_factor_betas_df = pd.DataFrame(port_factor_betas, columns=['idl', 'mkt_rf', 'hml', 'smb'])
+        
+#         # Add the portfolio ID to the DataFrame
+#         port_factor_betas_df['port_id'] = port_id
+        
+    
+#     # Append the DataFrame to the list
+#     factor_betas.append(port_factor_betas_df)
+    
+#     # Concatenate all the DataFrames in the list
+#     factor_betas_df = pd.concat(factor_betas)
+    
+#     return factor_betas_df
+               
+    
 def create_dlev_intan_port(df, quant_dlev, quant_intan, quant_pd, filename):
     df_copy = df.copy()
     quant_dlev_col = f'dlev_{quant_dlev}'
