@@ -57,18 +57,25 @@ def add_stars(tstat):
         return '*'
     else:
         return ''
-    
-def fm_ret_lev(df, quant_intan, subsample, filename):
+
+def fm_ret_lev(df, quant_intan, quant_lev, subsample, filename):
     df_copy = df.copy()
     df_copy.reset_index(inplace=True)
     df_copy['year_month'] = df_copy['year_month'].astype(str)
     df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m')
     quant_intan_col = f'intan_at_{quant_intan}'
+    quant_lev_col = f'lev_{quant_lev}'
     
     if subsample == 'hint':
-        df_subsample = df_copy[df_copy[quant_intan_col] == quant_intan]
+        # df_subsample = df_copy[df_copy[quant_intan_col] == quant_intan]
+        df_subsample = df_copy[(df_copy[quant_intan_col] == quant_intan) & (df_copy[quant_lev_col] == quant_lev)]
+        # df_subsample = df_copy[(df_copy[quant_lev_col] == quant_lev)]
+
     elif subsample == 'lint':
-        df_subsample = df_copy[df_copy[quant_intan_col] == 1]
+        # df_subsample = df_copy[df_copy[quant_intan_col] == 1]        
+        df_subsample = df_copy[(df_copy[quant_intan_col] == 1) & (df_copy[quant_lev_col] == quant_lev)]
+        # df_subsample = df_copy[(df_copy[quant_lev_col] == 1)]
+
     else:
         df_subsample = df_copy
         
@@ -89,7 +96,7 @@ def fm_ret_lev(df, quant_intan, subsample, filename):
     df_subsample['dlevXdummy_intan'] = df_subsample['dlev'] * df_subsample['dummy_intan']
     
     # dep_vars = ['RET_lead1', 'ret_2mo_lead1', 'ret_3mo_lead1']
-    dep_vars = ['ret_lead1', 'ret_lead2']
+    dep_vars = ['ret_lead1']
     # dep = df_clean_no_na['ret_2mo_lead1']*100
     # indep_vars = ['dlev', 'dlevXindust_dummy', 'indust_dummy', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
     
@@ -154,49 +161,78 @@ def fm_ret_lev(df, quant_intan, subsample, filename):
         firm_counts[dep_var] = df_reset['GVKEY'].nunique()
         r_squared[dep_var] = res.rsquared
 
-    # Extract coefficients and t-stats into a DataFrame
+    # Extract coefficients, standard errors, and confidence intervals into a DataFrame
     data = {'Variable': indep_vars}
     for dep_var, res in results.items():
-        coeffs = res.params.round(2).astype(str) + res.tstats.apply(add_stars)
-        tstats = res.tstats.round(2).astype(str)
+        coeffs = res.params.round(2)
+        t_stats = res.tstats.round(2)
+        std_errors = res.std_errors.round(2)
+        conf_int = res.conf_int()
+        lower_ci = conf_int.iloc[:, 0].round(2)
+        upper_ci = conf_int.iloc[:, 1].round(2)
+        
         data[f'{dep_var}_Coeff'] = coeffs
-        data[f'{dep_var}_t'] = tstats
+        data[f'{dep_var}_tstat'] = t_stats
+        data[f'{dep_var}_SE'] = std_errors
+        data[f'{dep_var}_CI_Lower'] = lower_ci
+        data[f'{dep_var}_CI_Upper'] = upper_ci
 
     dataframe = pd.DataFrame(data)
     dataframe['Variable'] = dataframe['Variable'].map(variable_labels)
 
-    # Generate rows for coefficients and t-stats
+    # Generate rows for coefficients, standard errors, and confidence intervals
     rows = []
+    # for _, row in dataframe.iterrows():
+    #     rows.append([row['Variable']] + [f"{row[f'{dep_var}_Coeff']:.4f}" for dep_var in dep_vars])
+    #     rows.append([''] + [f"({row[f'{dep_var}_tstat']:.4f})" for dep_var in dep_vars])
+    #     rows.append([''] + [f"({row[f'{dep_var}_SE']:.4f})" for dep_var in dep_vars])
+    #     rows.append([''] + [f"[{row[f'{dep_var}_CI_Lower']:.4f}, {row[f'{dep_var}_CI_Upper']:.4f}]" for dep_var in dep_vars])
+    
     for _, row in dataframe.iterrows():
-        rows.append([row['Variable']] + [row[f'{dep_var}_Coeff'] for dep_var in dep_vars])
-        rows.append([''] + [f"({row[f'{dep_var}_t']})" for dep_var in dep_vars])
+        coeff_rows = []
+        tstat_rows = []
+        se_rows = []
+        ci_rows = []
+        for dep_var in dep_vars:
+            coeff = f"{row[f'{dep_var}_Coeff']:.2f}"
+            tstat = row[f'{dep_var}_tstat']
+            stars = add_stars(tstat)  # Using the existing add_stars function
+            coeff_rows.append(f"{coeff}{stars}")
+            # tstat_rows.append(f"({tstat:.2f})")
+            se_rows.append(f"({row[f'{dep_var}_SE']:.2f})")
+            ci_rows.append(f"[{row[f'{dep_var}_CI_Lower']:.2f}, {row[f'{dep_var}_CI_Upper']:.2f}]")
 
-    # Add rows for number of observations, number of unique firms, and R-squared
-    obs_firms_data = [
-        ['Observations'] + [obs_counts[dep_var] for dep_var in dep_vars],
-        ['Number of Firms'] + [firm_counts[dep_var] for dep_var in dep_vars],
-        ['R-squared'] + [round(r_squared[dep_var], 5) for dep_var in dep_vars]
-    ]
+
+
+        
+        rows.append([row['Variable']] + coeff_rows)
+        # rows.append([''] + tstat_rows)
+        rows.append([''] + se_rows)
+        rows.append([''] + ci_rows)
+
+        # Add rows for number of observations, number of unique firms, and R-squared
+        obs_firms_data = [
+            ['Observations'] + [obs_counts[dep_var] for dep_var in dep_vars],
+            ['Number of Firms'] + [firm_counts[dep_var] for dep_var in dep_vars],
+            ['R^{2}'] + [f"{r_squared[dep_var]:.5f}" for dep_var in dep_vars]
+        ]
 
     # Generate LaTeX table with custom header
     custom_header = r"""
 \begin{table}[h!]
 \centering
-\begin{tabular}{lll}
+\renewcommand{\arraystretch}{1.3} % Increase row height
+\begin{tabular}{llll}
 \hline
 % Independent variables 
-& \multicolumn{2}{c}{Stock return (\%)} \\
-\cline{2-3}
-             & 1st month                      & 2nd month                     \\
+& \multicolumn{3}{c}{Stock return (\%)} \\
+\cline{2-4}
+             & All stocks   & High leverage & High leverage   \\ & & High IK/A & Low IK/A \\
 \hline
 """
 
-    # # Combine all rows
+    # Combine all rows
     all_rows = rows + obs_firms_data
-
-    # # Generate LaTeX table
-    # latex_table = tabulate(all_rows, headers=['Variable'] + dep_vars, tablefmt='latex_raw', showindex=False)
-
 
     # Generate the main content of the table
     table_content = tabulate(all_rows, tablefmt='latex_raw', showindex=False)
@@ -211,6 +247,161 @@ def fm_ret_lev(df, quant_intan, subsample, filename):
     # Print LaTeX table
     print(full_latex_table)
     create_latex_table_file(full_latex_table, filename)
+    
+# def fm_ret_lev(df, quant_intan, subsample, filename):
+#     df_copy = df.copy()
+#     df_copy.reset_index(inplace=True)
+#     df_copy['year_month'] = df_copy['year_month'].astype(str)
+#     df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m')
+#     quant_intan_col = f'intan_at_{quant_intan}'
+    
+#     if subsample == 'hint':
+#         df_subsample = df_copy[df_copy[quant_intan_col] == quant_intan]
+#     elif subsample == 'lint':
+#         df_subsample = df_copy[df_copy[quant_intan_col] == 1]
+#     else:
+#         df_subsample = df_copy
+        
+#     # df_copy['year_month'] = df_copy['year_month'].to_timestamp()
+#     # df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y%m').dt.to_period('M').to_timestamp()
+#     # df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y%m')
+
+#     df_subsample.set_index(['GVKEY', 'year_month'], inplace=True)
+    
+#     ###################################
+#     # Running Fama MacBeth regressions
+#     ###################################
+#     # df_copy['quant_intan_dummy'] = df_copy['intan_at_5'] == 5
+#     # df_copy['dlevXintan_quant'] = df_copy['dlev'] * df_copy['quant_intan_dummy']
+#     # df_copy['indust_dummy'] = df_copy['ff_indust'] == 10
+#     # df_copy['dlevXindust_dummy'] = df_copy['dlev'] * df_copy['indust_dummy']
+#     df_subsample['dummy_intan'] = df_subsample[quant_intan_col] == quant_intan
+#     df_subsample['dlevXdummy_intan'] = df_subsample['dlev'] * df_subsample['dummy_intan']
+    
+#     # dep_vars = ['RET_lead1', 'ret_2mo_lead1', 'ret_3mo_lead1']
+#     dep_vars = ['ret_lead1']
+#     # dep = df_clean_no_na['ret_2mo_lead1']*100
+#     # indep_vars = ['dlev', 'dlevXindust_dummy', 'indust_dummy', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+    
+#     indep_vars = ['dlev', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+#     # indep_vars = ['dlev', 'dlevXdummy_intan', 'dummy_intan', 'lev', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+
+#     # indep_vars = ['d_debt_at', 'debt_at', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+#     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'lint', 'beta', 'ln_me', 'bm', 'roe', 'one_year_cum_return', 'RET']
+#     #indep_vars = ['d_ln_debt_at', 'ln_ceqq', 'roa', 'RET', 'beta']
+#     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'lint', 'ln_ceqq', 'roa', 'RET', 'beta']
+#     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'hint', 'ln_ceqq', 'roa', 'RET', 'beta']
+#     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'hint']
+#     # indep_vars = ['d_debt_at', 'dummyXd_debt_at', 'hint', 'bm']
+#     # indep_vars = ['d_debt_at', 'ln_ceqq', 'roe', 'RET', 'beta']
+#     # indep_vars = ['dlev', 'beta', 'ln_me', 'bm', 'roe', 'RET']
+#     # indep_vars = ['d_ln_debt_at', 'ln_ceqq', 'roa', 'RET', 'bm']
+
+#     # Create a dictionary for variable labels
+#     variable_labels = {
+#         'd_debt_at': 'Debt/assets Change',
+#         'd_ln_debt_at': 'Debt/assets log change',
+#         'debt_at': 'Debt/assets',
+#         'd_ln_lev': 'Leverage log change',
+#         'dlev': 'Leverage Change',
+#         'lev': 'Leverage',
+#         'mkt_rf': 'Market Risk Premium',
+#         'smb': 'SMB',
+#         'hml': 'HML',
+#         'dummyXd_debt_at': 'High intan/at X Leverage Change',
+#         'dummyXdebt_at': 'High intan/at X Leverage',    
+#         'hlev': 'High Leverage dummy',    
+#         'llev': 'Low Leverage dummy',
+#         'hint': 'High intangible/assets dummy',
+#         'lint': 'Low intangible/assets dummy',
+#         'ln_ceqq': 'Log Equity',
+#         'ln_me': 'Log Market Value of Equity',
+#         'ln_at': 'Log Assets',
+#         'd_roe': 'Return on Equity Change',
+#         'roe': 'Return on Equity',    
+#         'roa': 'Return on Assets',
+#         'one_year_cum_return': 'Previous one-year return',
+#         'RET': 'Previous month return',
+#         'beta': 'Beta',
+#         'bm': 'Book-to-Market Ratio'
+#     }
+
+
+#     results = {}
+#     obs_counts = {}
+#     firm_counts = {}
+#     r_squared = {}
+
+#     for dep_var in dep_vars:
+#         df_clean_no_na = df_subsample.dropna(subset=[dep_var] + indep_vars)
+#         dep = df_clean_no_na[dep_var] * 100
+#         indep = df_clean_no_na[indep_vars]
+#         mod = FamaMacBeth(dep, indep)
+#         res = mod.fit()
+#         results[dep_var] = res
+#         obs_counts[dep_var] = res.nobs
+#         df_reset = df_clean_no_na.reset_index()
+#         firm_counts[dep_var] = df_reset['GVKEY'].nunique()
+#         r_squared[dep_var] = res.rsquared
+
+#     # Extract coefficients and t-stats into a DataFrame
+#     data = {'Variable': indep_vars}
+#     for dep_var, res in results.items():
+#         coeffs = res.params.round(2).astype(str) + res.tstats.apply(add_stars)
+#         tstats = res.tstats.round(2).astype(str)
+#         data[f'{dep_var}_Coeff'] = coeffs
+#         data[f'{dep_var}_t'] = tstats
+
+#     dataframe = pd.DataFrame(data)
+#     dataframe['Variable'] = dataframe['Variable'].map(variable_labels)
+
+#     # Generate rows for coefficients and t-stats
+#     rows = []
+#     for _, row in dataframe.iterrows():
+#         rows.append([row['Variable']] + [row[f'{dep_var}_Coeff'] for dep_var in dep_vars])
+#         rows.append([''] + [f"({row[f'{dep_var}_t']})" for dep_var in dep_vars])
+
+#     # Add rows for number of observations, number of unique firms, and R-squared
+#     obs_firms_data = [
+#         ['Observations'] + [obs_counts[dep_var] for dep_var in dep_vars],
+#         ['Number of Firms'] + [firm_counts[dep_var] for dep_var in dep_vars],
+#         ['R^{2}'] + [round(r_squared[dep_var], 5) for dep_var in dep_vars]
+#     ]
+
+#     # Generate LaTeX table with custom header
+#     custom_header = r"""
+# \begin{table}[h!]
+# \centering
+# \renewcommand{\arraystretch}{1.5} % Increase row height
+# \begin{tabular}{llll}
+# \hline
+# % Independent variables 
+# & \multicolumn{3}{c}{Stock return (\%)} \\
+# \cline{2-4}
+#              & All stocks   & High IK/A  & Low IK/A      \\
+# \hline
+# """
+
+#     # # Combine all rows
+#     all_rows = rows + obs_firms_data
+
+#     # # Generate LaTeX table
+#     # latex_table = tabulate(all_rows, headers=['Variable'] + dep_vars, tablefmt='latex_raw', showindex=False)
+
+
+#     # Generate the main content of the table
+#     table_content = tabulate(all_rows, tablefmt='latex_raw', showindex=False)
+    
+#     # Remove the \begin{tabular} and \hline from the generated content
+#     table_content = table_content.replace(r'\begin{tabular}{l' + 'l'*len(dep_vars) + '}', '')
+#     table_content = table_content.replace(r'\hline', '', 1)
+    
+#     # Combine custom header with table content
+#     full_latex_table = custom_header + table_content + "\n" + r"\end{table}"
+
+#     # Print LaTeX table
+#     print(full_latex_table)
+#     create_latex_table_file(full_latex_table, filename)
     
 
     #######################################################
@@ -597,13 +788,14 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     obs_firms_data = [
         ['Observations'] + [obs_counts[dep_var] for dep_var in dep_vars],
         ['Number of portfolios'] + [port_counts[dep_var] for dep_var in dep_vars],
-        ['R-squared'] + [round(r_squared[dep_var], 5) for dep_var in dep_vars]
+        ['R^{2}'] + [round(r_squared[dep_var], 5) for dep_var in dep_vars]
     ]
 
     # Generate LaTeX table with custom header
     custom_header = r"""
 \begin{table}[h!]
 \centering
+\renewcommand{\arraystretch}{1.5} % Increase row height
 \begin{tabular}{lllll}
 \hline
 % Independent variables 
@@ -758,13 +950,20 @@ def create_factor_betas(df, factors_list, window):
 #     return factor_betas_df
                
     
-def create_dlev_intan_port(df, quant_dlev, quant_intan, quant_pd, filename):
+def create_dlev_intan_port(df, quant_dlev, quant_intan, quant_pd, pd_subsample, filename):
     df_copy = df.copy()
     quant_dlev_col = f'dlev_{quant_dlev}'
     quant_intan_col = f'intan_at_{quant_intan}'
     quant_pd_col = f'pd_{quant_pd}'
     
-    df_subsample = df_copy[df_copy[quant_pd_col] == 1]
+    if pd_subsample == 'all':
+        df_subsample = df_copy
+    elif pd_subsample == 'hpd':
+        df_subsample = df_copy[df_copy[quant_pd_col] == quant_pd]
+    elif pd_subsample == 'lpd':
+        df_subsample = df_copy[df_copy[quant_pd_col] == 1]
+    else:
+        raise ValueError(f"Invalid pd_subsample: {pd_subsample}. Please choose from 'all', 'hpd', or 'lpd'.")
     # df_subsample = df_copy
 
     grouped = df_subsample.groupby(['year_month', quant_intan_col, quant_dlev_col])
@@ -792,11 +991,13 @@ def create_dlev_intan_port(df, quant_dlev, quant_intan, quant_pd, filename):
 \\setlength{\\tabcolsep}{3pt} % Adjust horizontal spacing
 \\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{2}{c}l*{2}{c}}
 \\toprule
-\\multicolumn{5}{c}{Intangible/assets portfolio} \\\\
-\\cmidrule(r){2-3} \\cmidrule(l){4-5}
+& \multicolumn{5}{c}{Intangible/assets portfolio} \\\\
+\\cmidrule(r){2-3} \\cmidrule(l){4-6}
 Leverage & \\multicolumn{2}{c}{Equal-weighted} & & \\multicolumn{2}{c}{Value-weighted} \\\\
-\\cmidrule(r){2-3} \\cmidrule(l){4-5}
+\\cmidrule(r){2-3} \\cmidrule(l){4-6}
 change portfolio & 1 (Lowest) & 3 (Highest) & & 1 (Lowest) & 3 (Highest) \\\\
+\\midrule
+Panel A: 1-month ahead average returns & & & & & \\\\
 \\midrule
 """
 
@@ -922,7 +1123,8 @@ change portfolio & 1 (Lowest) & 3 (Highest) & & 1 (Lowest) & 3 (Highest) \\\\
             wgt_row = weighted_avr_rows.loc[quant_dlev_rows]
             wgt_coeffs = [f"{wgt_row[col]:.2f}" for col in [weighted_avr_rows.columns[0], weighted_avr_rows.columns[-1]]]
             latex_output += " & ".join(wgt_coeffs) + " \\\\\n"
-
+        
+        latex_output += "\\midrule\n"
         # T-statistics row
         eqw_t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " & & "
         wgt_t_stats_row = " & ".join(weighted_t_stats_with_stars) + " \\\\\n"
@@ -938,7 +1140,11 @@ change portfolio & 1 (Lowest) & 3 (Highest) & & 1 (Lowest) & 3 (Highest) \\\\
         wgt_ci_row = " & ".join(weighted_ci_strings) + " \\\\\n"
         latex_output += eqw_ci_row + wgt_ci_row
 
-        latex_output += "\\midrule\n"
+        # latex_output += "\\midrule\n"
+        if col == 'ret_lead1':
+            latex_output += "\midrule \n"
+            latex_output += "Panel B: 2-months ahead average returns & & & & & \\\\ \n"
+            latex_output += "\midrule\n"
 
     latex_output += """
 \\bottomrule
@@ -1360,16 +1566,22 @@ def create_dlev_pd_port(df, quant_dlev, quant_pd):
 
     print(latex_table)
     
-def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, quant_pd, filename):
+def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, quant_pd, subsample_intan, filename):
     df_copy = df.copy()
     quant_dlev_col = f'dlev_{quant_dlev}'
     quant_intan_col = f'intan_at_{quant_intan}'
     quant_lev_col = f'lev_{quant_lev}'
     quant_pd_col = f'pd_{quant_pd}'
     
-    # df_subsample = df_copy[(df_copy[quant_pd_col] == quant_pd) & (df_copy[quant_intan_col] == quant_intan)]
-    df_subsample = df_copy[df_copy[quant_intan_col] == 1]
-    # df_subsample = df_copy
+    if subsample_intan == 'all':
+        df_subsample = df_copy
+    elif subsample_intan == 'hint':
+        df_subsample = df_copy[df_copy[quant_intan_col] == quant_intan]
+    elif subsample_intan == 'lint':
+        df_subsample = df_copy[df_copy[quant_intan_col] == 1]
+    else:
+        raise ValueError("Invalid subsample_intan value. Choose from 'all', 'hint', and 'lint'")
+
 
     grouped = df_subsample.groupby(['year_month', quant_lev_col, quant_dlev_col])
 
@@ -1388,20 +1600,22 @@ def create_dlev_lev_port(df, quant_dlev, quant_intan, quant_lev, quant_pd, filen
     filtered_grouped = filtered_df.groupby(['year_month', quant_lev_col, quant_dlev_col])
 
     columns_to_process = ['ret_lead1', 'ret_lead2']
-    
-    latex_output = """
 
+
+    latex_output = """
 \\begin{table}
 \\centering
 \\scriptsize
-\\setlength{\\tabcolsep}{0.7pt} % Adjust horizontal spacing
-\\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{5}{c}l*{5}{c}}
+\\setlength{\\tabcolsep}{3pt} % Increased horizontal spacing slightly
+\\begin{tabular*}{\\textwidth}{@{\\extracolsep{\\fill}}l*{8}{r}}
 \\toprule
-\\multicolumn{7}{c}{Leverage portfolios} \\\\
-\\cmidrule(r){2-6} \\cmidrule(l){7-11}
-Leverage & \\multicolumn{3}{c}{Equal-weighted} & & \\multicolumn{5}{c}{Value-weighted} \\\\
-\\cmidrule(r){2-6} \\cmidrule(l){7-11}
-change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4 & 5 (Highest) \\\\
+& \multicolumn{8}{c}{Leverage portfolio} \\\\
+\\cmidrule{2-9}
+Leverage & \multicolumn{4}{c}{Equal-weighted} & \multicolumn{4}{c}{Value-weighted} \\\\
+\\cmidrule(r){2-5} \cmidrule(l){6-9}
+change portfolio & 1 (Lowest) & 2 & 3 & 4 (Highest) & 1 (Lowest) & 2 & 3 & 4 (Highest) \\\\
+\\midrule
+\\multicolumn{9}{l}{Panel A: 1-month ahead average returns} \\\\
 \\midrule
 """
 
@@ -1457,6 +1671,7 @@ change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4
 
         pivot_df_percent = pivot_df * 100
         pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row, ignore_index=True)
+        # pivot_df_with_t_stats = pivot_df_percent._append(t_stats_row)
 
         ######################
         # Calculating std errors and CIs (Weighted)
@@ -1494,6 +1709,10 @@ change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4
         weighted_t_stats_row = pivot_weighted_df_with_t_stats.iloc[-1]
         weighted_avr_rows = pivot_weighted_df_with_t_stats.iloc[:-1]
 
+        # Extract the rows with coefficients
+        avr_rows = pivot_df_percent
+        weighted_avr_rows = pivot_weighted_df_percent
+        
         # Add stars based on p-values
         std_errors_with_stars = [f"({se:.2f}){add_stars(pval)}" for se, pval in zip(std_errors, p_values)]
         weighted_std_errors_with_stars = [f"({se:.2f}){add_stars(pval)}" for se, pval in zip(weighted_std_errors, weighted_p_values)]
@@ -1506,29 +1725,34 @@ change portfolio & 1 (Lowest) & 2 & & 4 & 5 (Highest) & & 1 (Lowest) & 2 & 3 & 4
         for idx, row in avr_rows.iterrows():
             quant_dlev_rows = row.name
             eqw_coeffs = [f"{row[col]:.2f}" for col in avr_rows.columns]
-            latex_output += f"{quant_dlev_rows} & " + " & ".join(eqw_coeffs) + " & & "
+            latex_output += f"{quant_dlev_rows} & " + " & ".join(eqw_coeffs) + " & "
 
             wgt_row = weighted_avr_rows.loc[quant_dlev_rows]
             wgt_coeffs = [f"{wgt_row[col]:.2f}" for col in weighted_avr_rows.columns]
             latex_output += " & ".join(wgt_coeffs) + " \\\\\n"
-
+            
+        latex_output += "\\midrule\n"
         # T-statistics row
-        eqw_t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " & & "
+        eqw_t_stats_row = "(t-statistics) & " + " & ".join(t_stats_with_stars) + " & "
         wgt_t_stats_row = " & ".join(weighted_t_stats_with_stars) + " \\\\\n"
         latex_output += eqw_t_stats_row + wgt_t_stats_row
 
         # Standard errors row
-        eqw_se_row = "(Std. Errors) & " + " & ".join(std_errors_with_stars) + " & & "
+        eqw_se_row = "(Std. Errors) & " + " & ".join(std_errors_with_stars) + " & "
         wgt_se_row = " & ".join(weighted_std_errors_with_stars) + " \\\\\n"
         latex_output += eqw_se_row + wgt_se_row
 
         # Confidence intervals row
-        eqw_ci_row = "(95\% CI) & " + " & ".join(ci_strings) + " & & "
+        eqw_ci_row = "(95\% CI) & " + " & ".join(ci_strings) + " & "
         wgt_ci_row = " & ".join(weighted_ci_strings) + " \\\\\n"
         latex_output += eqw_ci_row + wgt_ci_row
         
-        latex_output += "\\midrule\n"
-
+        # latex_output += "\\midrule\n"
+        if col == 'ret_lead1':
+            latex_output += "\midrule \n"
+            latex_output += "\multicolumn{9}{l}{Panel B: 2-months ahead average returns} \\\\ \n"
+            latex_output += "\midrule\n"
+            
     latex_output += """
 \\bottomrule
 \\end{tabular*}
