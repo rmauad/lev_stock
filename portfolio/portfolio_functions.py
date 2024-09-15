@@ -630,7 +630,7 @@ def idl_factor(df, quant_intan, quant_dlev, quant_size, quant_bm):
     
 #     return summary
 
-def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, window, port_ff, model_factor, filename):
+def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, window, model_factor, filename):
     df_copy = df.copy()
     df_copy.reset_index(inplace=True)
     df_copy['year_month'] = df_copy['year_month'].astype(str)
@@ -650,6 +650,9 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     
     portfolio_cols = ['year_month', quant_size_col, quant_intan_col, quant_dlev_col]
     factors_list = ['idl', 'mkt_rf', 'hml', 'smb', 'mom', 'cma', 'rmw']
+
+    # factors_list = ['mkt_rf', 'hml', 'smb', 'mom']
+    
     # portfolio_cols = ['year_month', quant_size_col, quant_bm_col]
     # factors_list = ['mkt_rf', 'hml', 'smb']
     
@@ -717,14 +720,18 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
 
     if model_factor == 'capm':
         indep_vars = ['beta_idl', 'beta_mkt', 'const'] # CAPM
+        # indep_vars = ['beta_mkt', 'const'] # CAPM
     elif model_factor == 'ff3':
         indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 3-factor
-    elif model_factor == 'cahart4':
+        # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 3-factor
+    elif model_factor == 'carhart4':
         indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'beta_mom', 'const'] # Cahart 4-factor
+        # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'beta_mom', 'const'] # Cahart 4-factor
     elif model_factor == 'ff5':
         indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'beta_cma', 'beta_rmw', 'const'] # Fama-French 5-factor
+        # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'beta_cma', 'beta_rmw', 'const'] # Fama-French 5-factor
     else:
-        raise ValueError(f"Invalid model_factor: {model_factor}. Please choose from 'capm', 'ff3', 'cahart4', or 'ff5'.")
+        raise ValueError(f"Invalid model_factor: {model_factor}. Please choose from 'capm', 'ff3', 'carhart4', or 'ff5'.")
 
     # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 5-factor
 
@@ -784,6 +791,9 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
         rows.append([row['Variable']] + [row[f'{dep_var}_Coeff'] for dep_var in dep_vars])
         rows.append([''] + [f"({row[f'{dep_var}_t']})" for dep_var in dep_vars])
 
+    # Add a horizontal line
+    # rows.append([r'\hline'] * (len(dep_vars) + 1))
+
     # Add rows for number of observations, number of unique firms, and R-squared
     obs_firms_data = [
         ['Observations'] + [obs_counts[dep_var] for dep_var in dep_vars],
@@ -802,7 +812,7 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
 % & \multicolumn{2}{c}{Stock return (\%)} \\
 % \cline{2-3}
             & CAPM+
-             & FF3+           & Cahart4+    
+             & FF3+           & Carhart4+    
              & FF5+ \\
 \hline
 """
@@ -858,7 +868,7 @@ def create_factor_betas(df, factors_list, window):
         port_data = port_data.sort_values('year_month')
         
         # Prepare the data for rolling regression
-        X = port_data[factors_list] # CHECK THIS (I THINK I SHOULD ONLY SELECT ONE FACTOR AT A TIME)
+        X = port_data[factors_list]
         y = port_data['ret_lead1_rf'] * 100  # Convert to percentage
         
         # Perform rolling regression
@@ -1658,7 +1668,9 @@ change portfolio & 1 (Lowest) & 2 & 3 & 4 (Highest) & 1 (Lowest) & 2 & 3 & 4 (Hi
 
         t_stats = []
 
-        for quant_lev_value in time_series_diff[quant_lev_col].unique():
+        sorted_quant_lev_values = sorted(time_series_diff[quant_lev_col].unique())
+
+        for quant_lev_value in sorted_quant_lev_values:
             df_filtered = time_series_diff[time_series_diff[quant_lev_col] == quant_lev_value]
             model = regress_on_constant(df_filtered)
             t_stats.append(model.tvalues[0]) 
@@ -1690,7 +1702,9 @@ change portfolio & 1 (Lowest) & 2 & 3 & 4 (Highest) & 1 (Lowest) & 2 & 3 & 4 (Hi
         pivot_weighted_t_stat['ret_diff'] = pivot_weighted_t_stat[1] - pivot_weighted_t_stat[quant_dlev]
         time_series_weighted_diff = pivot_weighted_t_stat[['year_month', quant_lev_col, 'ret_diff']]
 
-        for quant_lev_value in time_series_weighted_diff[quant_lev_col].unique():
+        sorted_quant_lev_values_weighted = sorted(time_series_weighted_diff[quant_lev_col].unique())
+
+        for quant_lev_value in sorted_quant_lev_values_weighted:
             df_filtered_weighted = time_series_weighted_diff[time_series_weighted_diff[quant_lev_col] == quant_lev_value]
             model_weighted = regress_on_constant(df_filtered_weighted)
             weighted_t_stats.append(model_weighted.tvalues[0]) 

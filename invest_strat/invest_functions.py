@@ -3,6 +3,35 @@ import pandas as pd
 import numpy as np
 from .announce_execution import announce_execution
 
+
+@announce_execution
+def filter_data(df):
+    # Filter out stocks with prices < $1 and those at the bottom 10% of market cap (as in Asness et al. 2013)
+    df_copy = df.copy()
+    df_copy = df_copy[df_copy['PRC'].abs() >= 5]
+    
+    df_copy = (df_copy
+        .sort_values(['year_month', 'me'], ascending=[True, False])
+        .assign(
+            total_me = lambda x: x.groupby('year_month')['me'].transform('sum'),
+            cum_me = lambda x: x.groupby('year_month')['me'].cumsum(),
+            cum_pct = lambda x: x['cum_me'] / x['total_me']
+        )
+        .query('cum_pct <= 0.9')
+        .sort_values(['year_month', 'me'])
+        .reset_index(drop=True)
+    )
+    
+    # df_copy = (df_copy
+    #     .assign(decile_me = lambda x: x.groupby('year_month')['me'].transform(
+    #         lambda y: pd.qcut(y, 10, labels=False, duplicates='drop') + 1
+    #     ))
+    #     .query('decile_me > 1')
+    # )
+    
+    return df_copy
+
+
 @announce_execution
 def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd, quant_size, quant_bm, quant_lev_vol, window_vol):
     df_copy = df.copy()
@@ -93,8 +122,34 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd
     else:
         return df_copy
 
+def select_firms(df, quant_intan, quant_lev, quant_dlev):
+    quant_intan_col = f'intan_at_{quant_intan}'
+    quant_lev_col = f'lev_{quant_lev}'
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    # Filter for highest tercile of intan_at and highest quartile of lev
+    
+    df_filtered = df[(df[quant_intan_col] == quant_intan) & (df[quant_lev_col] == quant_lev)]
+
+    # Group by year_month and dlev_quintile
+    grouped = df_filtered.groupby(['year_month', quant_dlev_col])
+
+    # Function to select two random firms from each group
+    def select_two_firms(group):
+        if len(group) >= 2:
+            return group.sample(n=2)
+        else:
+            return group
+
+    # Apply the selection function to each group
+    selected_firms = grouped.apply(select_two_firms)
+
+    # Reset index to flatten the result
+    selected_firms = selected_firms.reset_index(drop=True)
+
+    return selected_firms
+
 @announce_execution
-def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd, double_strat, intan_measure):
+def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd, double_strat, intan_measure, subsample):
     df_copy = df.copy()
 
     # Define the names of the quantile columns based on the input quantile values
@@ -104,12 +159,28 @@ def create_portfolios(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_p
     quant_kkr_col = f'kkr_{quant_kkr}'
     quant_pd_col = f'pd_{quant_pd}'    
     # quant_lev_vol_col = f'lev_vol_{quant_lev_vol}'
+    
+    if subsample == 'all':
+        df_copy = df_copy
+    elif subsample == 'hint':
+        df_copy = df_copy[(df_copy[quant_intan_col] == quant_intan)]
+    elif subsample == 'lint':
+        df_copy = df_copy[(df_copy[quant_intan_col] == 1)]
+    elif subsample == 'hpd':
+        df_copy = df_copy[(df_copy[quant_pd_col] == quant_pd)]
+    elif subsample == 'lpd':
+        df_copy = df_copy[(df_copy[quant_pd_col] == 1)]
+    else:
+        raise ValueError('Invalid subsample value. Please choose from "all", "hint", "lint", "hpd", "lpd"')
       
     df_copy['long'] = np.where((df_copy[quant_dlev_col] == 1), 1, 0)
     df_copy['short'] = np.where((df_copy[quant_dlev_col] == quant_dlev), 1, 0)
     
     df_copy['long_hlev'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
     df_copy['short_hlev'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == quant_lev), 1, 0)
+    
+    df_copy['long_llev'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_lev_col] == 1), 1, 0)
+    df_copy['short_llev'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_lev_col] == 1), 1, 0)
     
     df_copy['long_hpd'] = np.where((df_copy[quant_dlev_col] == 1) & (df_copy[quant_pd_col] == quant_pd), 1, 0)
     df_copy['short_hpd'] = np.where((df_copy[quant_dlev_col] == quant_dlev) & (df_copy[quant_pd_col] == quant_pd), 1, 0)
@@ -209,6 +280,8 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy['short_at'] = df_copy['short'] * df_copy['atq']
         df_copy['long_hlev_at'] = df_copy['long_hlev'] * df_copy['atq']
         df_copy['short_hlev_at'] = df_copy['short_hlev'] * df_copy['atq']
+        df_copy['long_llev_at'] = df_copy['long_llev'] * df_copy['atq']
+        df_copy['short_llev_at'] = df_copy['short_llev'] * df_copy['atq']
         df_copy['long_hpd_at'] = df_copy['long_hpd'] * df_copy['atq']
         df_copy['short_hpd_at'] = df_copy['short_hpd'] * df_copy['atq']
         df_copy['long_hint_at'] = df_copy['long_hint'] * df_copy['atq']
@@ -220,6 +293,8 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy['short_weight'] = df_copy['short_at'] / df_copy.groupby('year_month')['short_at'].transform('sum')
         df_copy['long_weight_hlev'] = df_copy['long_hlev_at'] / df_copy.groupby('year_month')['long_hlev_at'].transform('sum')
         df_copy['short_weight_hlev'] = df_copy['short_hlev_at'] / df_copy.groupby('year_month')['short_hlev_at'].transform('sum')
+        df_copy['long_weight_llev'] = df_copy['long_llev_at'] / df_copy.groupby('year_month')['long_llev_at'].transform('sum')
+        df_copy['short_weight_llev'] = df_copy['short_llev_at'] / df_copy.groupby('year_month')['short_llev_at'].transform('sum')
         df_copy['long_weight_hpd'] = df_copy['long_hpd_at'] / df_copy.groupby('year_month')['long_hpd_at'].transform('sum')
         df_copy['short_weight_hpd'] = df_copy['short_hpd_at'] / df_copy.groupby('year_month')['short_hpd_at'].transform('sum')
         df_copy['long_weight_hint'] = df_copy['long_hint_at'] / df_copy.groupby('year_month')['long_hint_at'].transform('sum')
@@ -232,6 +307,8 @@ def weighted_returns(df, holding_period, value_weight):
         df_copy['short_weight'] = df_copy['short'] / df_copy.groupby('year_month')['short'].transform('sum')
         df_copy['long_weight_hlev'] = df_copy['long_hlev'] / df_copy.groupby('year_month')['long_hlev'].transform('sum')
         df_copy['short_weight_hlev'] = df_copy['short_hlev'] / df_copy.groupby('year_month')['short_hlev'].transform('sum')
+        df_copy['long_weight_llev'] = df_copy['long_llev'] / df_copy.groupby('year_month')['long_llev'].transform('sum')
+        df_copy['short_weight_llev'] = df_copy['short_llev'] / df_copy.groupby('year_month')['short_llev'].transform('sum')
         df_copy['long_weight_hpd'] = df_copy['long_hpd'] / df_copy.groupby('year_month')['long_hpd'].transform('sum')
         df_copy['short_weight_hpd'] = df_copy['short_hpd'] / df_copy.groupby('year_month')['short_hpd'].transform('sum')
         df_copy['long_weight_hint'] = df_copy['long_hint'] / df_copy.groupby('year_month')['long_hint'].transform('sum')
@@ -241,17 +318,24 @@ def weighted_returns(df, holding_period, value_weight):
 
     for period in range(1, holding_period + 1):
         ret_col = f'ret_lead{period}'
-        df_copy[ret_col] = df_copy.groupby('gvkey')['ret'].shift(-3) # strategy starts 3 months after quarter-end date
+        # df_copy[ret_col] = df_copy.groupby('gvkey')['ret'].shift(-period) # strategy starts 3 months after quarter-end date
         weighted_ret_col = f'weighted_strat_return_lead{period}'
         weighted_ret_col_hlev = f'weighted_strat_return_hlev_lead{period}'
+        weighted_ret_col_llev = f'weighted_strat_return_llev_lead{period}'
         weighted_ret_col_hpd = f'weighted_strat_return_hpd_lead{period}'
         weighted_ret_col_hint = f'weighted_strat_return_hint_lead{period}'
         weighted_ret_col_lint = f'weighted_strat_return_lint_lead{period}'
         df_copy[weighted_ret_col] = df_copy[ret_col] * (df_copy['long_weight'] - df_copy['short_weight'])
-        df_copy[weighted_ret_col_hlev] = df_copy[ret_col] * (df_copy['long_weight_hlev'] - df_copy['short_weight_hlev'])        
+        df_copy[weighted_ret_col_hlev] = df_copy[ret_col] * (df_copy['long_weight_hlev'] - df_copy['short_weight_hlev'])
+        df_copy[weighted_ret_col_llev] = df_copy[ret_col] * (df_copy['long_weight_llev'] - df_copy['short_weight_llev'])         
         df_copy[weighted_ret_col_hpd] = df_copy[ret_col] * (df_copy['long_weight_hpd'] - df_copy['short_weight_hpd'])        
         df_copy[weighted_ret_col_hint] = df_copy[ret_col] * (df_copy['long_weight_hint'] - df_copy['short_weight_hint'])
         df_copy[weighted_ret_col_lint] = df_copy[ret_col] * (df_copy['long_weight_lint'] - df_copy['short_weight_lint'])
+        # df_copy[weighted_ret_col] = df_copy[ret_col] * df_copy['long_weight'] - (df_copy[ret_col]/(1 + df_copy[ret_col])) * df_copy['short_weight']
+        # df_copy[weighted_ret_col_hlev] = df_copy[ret_col] * df_copy['long_weight_hlev'] - (df_copy[ret_col]/(1 + df_copy[ret_col])) * df_copy['short_weight_hlev']        
+        # df_copy[weighted_ret_col_hpd] = df_copy[ret_col] * df_copy['long_weight_hpd'] - (df_copy[ret_col]/(1 + df_copy[ret_col])) * df_copy['short_weight_hpd']       
+        # df_copy[weighted_ret_col_hint] = df_copy[ret_col] * df_copy['long_weight_hint'] - (df_copy[ret_col]/(1 + df_copy[ret_col])) * df_copy['short_weight_hint']
+        # df_copy[weighted_ret_col_lint] = df_copy[ret_col] * df_copy['long_weight_lint'] - (df_copy[ret_col]/(1 + df_copy[ret_col])) * df_copy['short_weight_lint']
         
     return df_copy
 
@@ -284,11 +368,13 @@ def agg_weighted_returns(df, holding_period):
     for period in range(1, holding_period + 1):
         weighted_ret_col = f'weighted_strat_return_lead{period}'
         weighted_ret_col_hlev = f'weighted_strat_return_hlev_lead{period}'
+        weighted_ret_col_llev = f'weighted_strat_return_llev_lead{period}'
         weighted_ret_col_hpd = f'weighted_strat_return_hpd_lead{period}'        
         weighted_ret_col_hint = f'weighted_strat_return_hint_lead{period}'
         weighted_ret_col_lint = f'weighted_strat_return_lint_lead{period}'
         aggregation_dict[weighted_ret_col] = 'sum'
         aggregation_dict[weighted_ret_col_hlev] = 'sum'
+        aggregation_dict[weighted_ret_col_llev] = 'sum'
         aggregation_dict[weighted_ret_col_hpd] = 'sum'                
         aggregation_dict[weighted_ret_col_hint] = 'sum'
         aggregation_dict[weighted_ret_col_lint] = 'sum'
@@ -336,23 +422,27 @@ def avr_port_holding_period(df, holding_period):
     for i in range(1, df_port_ret_agg.shape[0] - holding_period + 2):
         port_col = f'port{i}'
         port_hlev_col = f'port_hlev{i}'
+        port_llev_col = f'port_llev{i}'
         port_hpd_col = f'port_hpd{i}'
         port_hint_col = f'port_hint{i}'
         port_lint_col = f'port_lint{i}'
         df_port_ret_agg[port_col] = np.nan
         df_port_ret_agg[port_hlev_col] = np.nan
+        df_port_ret_agg[port_llev_col] = np.nan
         df_port_ret_agg[port_hpd_col] = np.nan
         df_port_ret_agg[port_hint_col] = np.nan
         df_port_ret_agg[port_lint_col] = np.nan
         for period in range(holding_period):
             lead_col = f'weighted_strat_return_lead{period + 1}'
             lead_hlev_col = f'weighted_strat_return_hlev_lead{period + 1}'
+            lead_llev_col = f'weighted_strat_return_llev_lead{period + 1}'
             lead_hpd_col = f'weighted_strat_return_hpd_lead{period + 1}'
             lead_hint_col = f'weighted_strat_return_hint_lead{period + 1}'
             lead_lint_col = f'weighted_strat_return_lint_lead{period + 1}'
             if i + period < df_port_ret_agg.shape[0]:
                 df_port_ret_agg.loc[i + period, port_col] = df_port_ret_agg.loc[i + period, lead_col]  
                 df_port_ret_agg.loc[i + period, port_hlev_col] = df_port_ret_agg.loc[i + period, lead_hlev_col]
+                df_port_ret_agg.loc[i + period, port_llev_col] = df_port_ret_agg.loc[i + period, lead_llev_col]
                 df_port_ret_agg.loc[i + period, port_hpd_col] = df_port_ret_agg.loc[i + period, lead_hpd_col]  
                 df_port_ret_agg.loc[i + period, port_hint_col] = df_port_ret_agg.loc[i + period, lead_hint_col]  
                 df_port_ret_agg.loc[i + period, port_lint_col] = df_port_ret_agg.loc[i + period, lead_lint_col]  
@@ -384,7 +474,7 @@ def calculate_annualized_sharpe_ratio(ret_rf):
     """Calculate the annualized Sharpe ratio for a series of monthly returns."""
     # Convert monthly risk-free rate to the same frequency as returns
 
-    excess_returns = ret_rf_copy[['strat_ret', 'strat_hlev_ret', 'strat_hint_ret', 'strat_lint_ret']].subtract(ret_rf_copy['rf']/100, axis=0)
+    excess_returns = ret_rf_copy[['strat_ret', 'strat_hlev_ret', 'strat_llev_ret', 'strat_hint_ret', 'strat_lint_ret']].subtract(ret_rf_copy['rf']/100, axis=0)
     # excess_returns_dates = pd.concat([ret_rf_copy['year_month'], excess_returns], axis=1)
     dates = ret_rf_copy['year_month']
 

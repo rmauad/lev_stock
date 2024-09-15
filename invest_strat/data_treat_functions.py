@@ -12,13 +12,15 @@ def calc_avr_portfolio(df):
     df_copy['strat_ret'] = df_copy[port_columns].mean(axis=1, skipna=True)
     port_hlev_columns = [col for col in df_copy.columns if col.startswith('port_hlev')]
     df_copy['strat_hlev_ret'] = df_copy[port_hlev_columns].mean(axis=1, skipna=True)
+    port_llev_columns = [col for col in df_copy.columns if col.startswith('port_llev')]
+    df_copy['strat_llev_ret'] = df_copy[port_llev_columns].mean(axis=1, skipna=True) 
     port_hpd_columns = [col for col in df_copy.columns if col.startswith('port_hpd')]
     df_copy['strat_hpd_ret'] = df_copy[port_hpd_columns].mean(axis=1, skipna=True)
     port_hint_columns = [col for col in df_copy.columns if col.startswith('port_hint')]
     df_copy['strat_hint_ret'] = df_copy[port_hint_columns].mean(axis=1, skipna=True)
     port_lint_columns = [col for col in df_copy.columns if col.startswith('port_lint')]
     df_copy['strat_lint_ret'] = df_copy[port_lint_columns].mean(axis=1, skipna=True)
-    df_strat_ret = df_copy[['year_month', 'strat_ret', 'strat_hlev_ret', 'strat_hpd_ret', 'strat_hint_ret', 'strat_lint_ret']]
+    df_strat_ret = df_copy[['year_month', 'strat_ret', 'strat_hlev_ret', 'strat_llev_ret', 'strat_hpd_ret', 'strat_hint_ret', 'strat_lint_ret']]
 
     return df_strat_ret
 
@@ -49,7 +51,7 @@ def merge_df_rf(df, rf):
     df_copy = df_copy.reset_index()
     rf_agg = rf.groupby('year_month').first().reset_index()
 
-    returns = df_copy[['year_month', 'strat_ret', 'strat_hlev_ret', 'strat_hint_ret', 'strat_lint_ret']]
+    returns = df_copy[['year_month', 'strat_ret', 'strat_hlev_ret', 'strat_llev_ret', 'strat_hint_ret', 'strat_lint_ret']]
 
     ret_rf = pd.merge(returns, rf_agg, on = 'year_month', how = 'left')
 

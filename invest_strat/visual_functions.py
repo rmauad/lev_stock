@@ -270,7 +270,7 @@ def plot_returns_mkt(df, sp500, all_stocks):
 #         return df_copy, fig
 
 @announce_execution
-def plot_returns(df, double_strat):
+def plot_returns(df, double_strat, subsample, strat):
     plt.rcParams.update({
         'font.size': 22,           # General font size
         'axes.titlesize': 24,      # Title font size
@@ -286,6 +286,7 @@ def plot_returns(df, double_strat):
     df_copy = (df_copy
                 .assign(strat_ret_cum = (1 + df_copy['strat_ret']).cumprod())
                 .assign(strat_ret_hlev_cum = (1 + df_copy['strat_hlev_ret']).cumprod())
+                .assign(strat_ret_llev_cum = (1 + df_copy['strat_llev_ret']).cumprod())
                 # .assign(strat_ret_hpd_cum = (1 + df_copy['strat_hpd_ret']).cumprod())               
                 .assign(strat_ret_hint_cum = (1 + df_copy['strat_hint_ret']).cumprod())
                 .assign(strat_ret_lint_cum = (1 + df_copy['strat_lint_ret']).cumprod())
@@ -294,6 +295,7 @@ def plot_returns(df, double_strat):
 # Normalize cumulative returns such that they start at 1
     df_copy['strat_ret_cum_norm'] = df_copy['strat_ret_cum'] / df_copy['strat_ret_cum'].iloc[1]
     df_copy['strat_ret_hlev_cum_norm'] = df_copy['strat_ret_hlev_cum'] / df_copy['strat_ret_hlev_cum'].iloc[1]
+    df_copy['strat_ret_llev_cum_norm'] = df_copy['strat_ret_llev_cum'] / df_copy['strat_ret_llev_cum'].iloc[1]
     # df_copy['strat_ret_hpd_cum_norm'] = df_copy['strat_ret_hpd_cum'] / df_copy['strat_ret_hpd_cum'].iloc[1]
     df_copy['strat_ret_hint_cum_norm'] = df_copy['strat_ret_hint_cum'] / df_copy['strat_ret_hint_cum'].iloc[1]
     df_copy['strat_ret_lint_cum_norm'] = df_copy['strat_ret_lint_cum'] / df_copy['strat_ret_lint_cum'].iloc[1]
@@ -301,21 +303,54 @@ def plot_returns(df, double_strat):
 
 # save = df_sp500.to_feather('data/feather/df_strat_ret_sp500.feather')
 
-# Plotting the cumulative returns
+    # fig, ax = plt.subplots()
+    # ax = df_copy.plot(x='year_month', y=['strat_ret_cum_norm', 'strat_ret_hlev_cum_norm', 'strat_ret_hint_cum_norm', 'strat_ret_lint_cum_norm'], figsize=(10, 6))
+    # # ax = df_copy.plot(x='year_month', y=['strat_ret_cum_norm', 'strat_ret_hint_cum_norm', 'strat_ret_lint_cum_norm'], figsize=(10, 6))
+    # ax.set_title('Leverage change investment strategies')
+    # ax.set_ylabel('Cumulative return')
+    # ax.set_xlabel('Period')
+    # ax.grid()
 
-    fig, ax = plt.subplots()
-    ax = df_copy.plot(x='year_month', y=['strat_ret_cum_norm', 'strat_ret_hlev_cum_norm', 'strat_ret_hint_cum_norm', 'strat_ret_lint_cum_norm'], figsize=(10, 6))
-    ax.set_title('Leverage change investment strategies')
-    ax.set_ylabel('Cumulative return')
-    ax.set_xlabel('Period')
-    ax.grid()
+    # if double_strat == 0:
+    #     ax.legend(['All stocks', 'High leverage level', 'High intangible/assets', 'Low intangible/assets'],
+    #     # ax.legend(['All stocks', 'High intangible/assets', 'Low intangible/assets'],
+    #                 loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)
+    # else:
+    #     ax.legend(['All stocks', 'High leverage level', 'High leverage level and high intangible/assets', 'High leverage level and low intangible/assets'],
+    #                 loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)
     
-    if double_strat == 0:
-        ax.legend(['All stocks', 'High leverage level', 'High intangible/assets', 'Low intangible/assets'],
-                    loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
+    
+# Plotting the cumulative returns
+    if strat == 'lev':
+        fig, ax = plt.subplots()
+        ax = df_copy.plot(x='year_month', y=['strat_ret_hlev_cum_norm', 'strat_ret_llev_cum_norm'], figsize=(10, 6))
+        # ax = df_copy.plot(x='year_month', y=['strat_ret_cum_norm', 'strat_ret_hint_cum_norm', 'strat_ret_lint_cum_norm'], figsize=(10, 6))
+        ax.set_title('Leverage change investment strategies')
+        ax.set_ylabel('Cumulative return')
+        ax.set_xlabel('Period')
+        ax.grid()
+    
+        ax.legend(['High leverage level', 'Low leverage level'],
+        # ax.legend(['All stocks', 'High intangible/assets', 'Low intangible/assets'],
+                    loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2
+                    )
+        
+    elif strat == 'intan':
+        fig, ax = plt.subplots()
+        ax = df_copy.plot(x='year_month', y=['strat_ret_hint_cum_norm', 'strat_ret_lint_cum_norm'], figsize=(10, 6))
+        # ax = df_copy.plot(x='year_month', y=['strat_ret_cum_norm', 'strat_ret_hint_cum_norm', 'strat_ret_lint_cum_norm'], figsize=(10, 6))
+        ax.set_title('Leverage change investment strategies')
+        ax.set_ylabel('Cumulative return')
+        ax.set_xlabel('Period')
+        ax.grid()
+    
+        ax.legend(['High intangible/assets', 'Low intangible/assets'],
+        # ax.legend(['All stocks', 'High intangible/assets', 'Low intangible/assets'],
+                    loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2
+                    )
+        
     else:
-        ax.legend(['All stocks', 'High leverage level', 'High leverage level and high intangible/assets', 'High leverage level and low intangible/assets'],
-                    loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)
+        raise ValueError('Invalid strategy. Choose either "lev" or "intan"')
     
     fig.tight_layout()  # Automatically adjust layout to fit within figure area
 
@@ -339,20 +374,46 @@ def plot_returns(df, double_strat):
 #     return plot_sharpe
 
 @announce_execution
-def plot_sharpe(rolling_sharpe_ratio, double_strat):
-    plot_sharpe, ax = plt.subplots()
-    ax = rolling_sharpe_ratio.plot(x='year_month', y=['strat_ret', 'strat_hlev_ret', 'strat_hint_ret', 'strat_lint_ret'], figsize=(10, 6))
-    ax.set_title('Sharpe ratio leverage change investment strategies')
-    ax.set_ylabel('5-year rolling window Sharpe ratio')
-    ax.set_xlabel('Period')
-    ax.grid()
+def plot_sharpe(rolling_sharpe_ratio, double_strat, strat):
     
-    if double_strat == 0:
-        ax.legend(['SR all stocks', 'SR high leverage level', 'SR high intangible/assets', 'SR low intangible/assets'],
+    if strat == 'lev':
+        plot_sharpe, ax = plt.subplots()
+        ax = rolling_sharpe_ratio.plot(x='year_month', y=['strat_hlev_ret', 'strat_llev_ret'], figsize=(10, 6))
+        ax.set_title('Sharpe ratio leverage change investment strategies')
+        ax.set_ylabel('5-year rolling window Sharpe ratio')
+        ax.set_xlabel('Period')
+        ax.grid()
+        
+
+        ax.legend(['SR high leverage level', 'SR low leverage level'],
                 loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
-    else:
-        ax.legend(['SR all stocks', 'SR high leverage level', 'SR high leverage level and high intangible/assets', 'SR high leverage level and low intangible/assets'],
-                loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)        
+        
+    elif strat == 'intan':
+        plot_sharpe, ax = plt.subplots()
+        ax = rolling_sharpe_ratio.plot(x='year_month', y=['strat_hint_ret', 'strat_lint_ret'], figsize=(10, 6))
+        ax.set_title('Sharpe ratio leverage change investment strategies')
+        ax.set_ylabel('5-year rolling window Sharpe ratio')
+        ax.set_xlabel('Period')
+        ax.grid()
+        
+
+        ax.legend(['SR high intangible/assets', 'SR low intangible/assets'],
+                loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
+        
+
+    # plot_sharpe, ax = plt.subplots()
+    # ax = rolling_sharpe_ratio.plot(x='year_month', y=['strat_ret', 'strat_hlev_ret', 'strat_hint_ret', 'strat_lint_ret'], figsize=(10, 6))
+    # ax.set_title('Sharpe ratio leverage change investment strategies')
+    # ax.set_ylabel('5-year rolling window Sharpe ratio')
+    # ax.set_xlabel('Period')
+    # ax.grid()
+    
+    # if double_strat == 0:
+    #     ax.legend(['SR all stocks', 'SR high leverage level', 'SR high intangible/assets', 'SR low intangible/assets'],
+    #             loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
+    # else:
+    #     ax.legend(['SR all stocks', 'SR high leverage level', 'SR high leverage level and high intangible/assets', 'SR high leverage level and low intangible/assets'],
+    #             loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=1)        
     
     plot_sharpe.tight_layout()  # Automatically adjust layout to fit within figure area
 
