@@ -69,7 +69,7 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd
         'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
         'lev': (quant_lev, f'lev_{quant_lev}'),
         'default_probability': (quant_pd, f'pd_{quant_pd}'),
-        'me': (quant_size, f'size_{quant_size}'),
+        # 'me': (quant_size, f'size_{quant_size}'),
         'bm': (quant_bm, f'bm_{quant_bm}')
         # 'KKR': (quant_kkr, f'kkr_{quant_kkr}')
         }
@@ -103,6 +103,31 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd
         df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
             lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1)) if len(x) >= quant_count else pd.Series([None]*len(x))
             )
+        
+    ###################################################################################################
+    # Size and BM "quantiles" are not exactly quantiles. 
+    # We follow FF1992 and use median NYSE breakpoints for size, and 30th and 70th percentiles for BM 
+    ###################################################################################################
+
+    df_copy_filtered = (df_copy
+               .query('EXCHCD == 1')  # Select only NYSE firms (exchange code 1)
+               .assign(nyse_median = lambda x: x.groupby('year_month')['me'].transform('median'))
+               .reset_index(drop=True)
+               )
+    
+    # df_copy['size_2'] = df_copy.groupby('year_month')['me'].transform(
+    #     lambda x: pd.qcut(x, 2, labels=range(1, 3)) if len(x) >= 2 else pd.Series([None]*len(x))
+    #     )
+    
+    nyse_median_dict = df_copy_filtered.groupby('year_month')['nyse_median'].first().to_dict()
+    df_copy['nyse_median'] = df_copy['year_month'].map(nyse_median_dict)
+
+    # df_copy = df_copy.merge(df_copy_filtered[['year_month', 'nyse_median']], on=['year_month'], how='left')
+
+    df_copy['size_2'] = df_copy.groupby('year_month').apply(
+        lambda x: (x['me'] > x['nyse_median']).astype(int) + 1 if len(x) >= 2 else pd.Series([None]*len(x))
+        ).reset_index(level=0, drop=True)
+
         
     # for column, (quant_count, quant_name) in quantile_info.items():
     #     df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
@@ -523,3 +548,111 @@ def rolling_sharpe_ratio(excess_returns, window, dates):
 def create_factors(df):
     df_copy = df.copy()
     df_copy['dlev'] = df_copy.groupby('gvkey')['ret'].transform(lambda x: x.rolling(12).sum())
+    
+    
+# def calc_std_strat(df):
+#     df_copy = df.copy()
+    
+#     df_copy = (df_copy
+#                .assign(hml_aux = lambda x: np.log(1 + x['hml']/100))
+#                .assign(smb_aux = lambda x: np.log(1 + x['smb']/100))
+#                )
+    
+#     # Then, aggregate by year_month
+#     df_aggregated = (df_copy
+#                      .groupby('year_month')
+#                      .agg({
+#                          'hml': 'first',
+#                          'smb': 'first',
+#                          'hml_aux': 'first',  # Keep the first observation of hml_aux
+#                          'smb_aux': 'first',  # Keep the first observation of smb_aux
+#             })
+#             .reset_index()
+#             )
+    
+#     # df_aggregated = (df_aggregated
+#     #                  .assign(hml_cum = df_aggregated['hml_aux'].cumsum())
+#     #                  .assign(smb_cum = df_aggregated['smb_aux'].cumsum())
+#     #                  )
+    
+#     df_aggregated = df_aggregated.sort_values('year_month')
+
+#     # Find the index of 1975-12
+#     start_index = df_aggregated[df_aggregated['year_month'] == '1975-12'].index[0]
+
+#     df_aggregated = (df_aggregated
+#         # Calculate cumulative sum of aux variables
+#         .assign(hml_cum_raw = lambda x: x['hml_aux'].cumsum())
+#         .assign(smb_cum_raw = lambda x: x['smb_aux'].cumsum())
+        
+#         # Adjust to start from 1975-12
+#         .assign(hml_cum_adj = lambda x: x['hml_cum_raw'] - x['hml_cum_raw'].iloc[start_index])
+#         .assign(smb_cum_adj = lambda x: x['smb_cum_raw'] - x['smb_cum_raw'].iloc[start_index])
+        
+#         # Calculate cumulative returns starting from 1
+#         .assign(hml_cum = lambda x: np.exp(x['hml_cum_adj']))
+#         .assign(smb_cum = lambda x: np.exp(x['smb_cum_adj']))
+#     )
+
+#     # Set values before 1975-12 to NaN
+#     df_aggregated.loc[:start_index, ['hml_cum', 'smb_cum']] = np.nan
+
+#     # Set the value for 1975-12 to 1
+#     df_aggregated.loc[start_index, ['hml_cum', 'smb_cum']] = 1
+
+
+#     return df_aggregated
+
+
+def calc_std_strat(df):
+    df_copy = df.copy()
+    
+    df_copy = (df_copy
+               .assign(hml_aux = lambda x: np.log(1 + x['hml']/100))
+               .assign(smb_aux = lambda x: np.log(1 + x['smb']/100))
+               )
+    
+    # Then, aggregate by year_month
+    df_aggregated = (df_copy
+                     .groupby('year_month')
+                     .agg({
+                         'hml': 'first',
+                         'smb': 'first',
+                         'hml_aux': 'first',  # Keep the first observation of hml_aux
+                         'smb_aux': 'first',  # Keep the first observation of smb_aux
+            })
+            .reset_index()
+            )
+    
+    # df_aggregated = (df_aggregated
+    #                  .assign(hml_cum = df_aggregated['hml_aux'].cumsum())
+    #                  .assign(smb_cum = df_aggregated['smb_aux'].cumsum())
+    #                  )
+    
+    df_aggregated = df_aggregated.sort_values('year_month')
+
+    # Find the index of 1975-12
+    start_index = df_aggregated[df_aggregated['year_month'] == '1975-12'].index[0]
+
+    df_aggregated = (df_aggregated
+        # Calculate cumulative sum of aux variables
+        .assign(hml_cum_raw = lambda x: x['hml_aux'].cumsum())
+        .assign(smb_cum_raw = lambda x: x['smb_aux'].cumsum())
+        
+        # Adjust to start from 1975-12
+        .assign(hml_cum_adj = lambda x: x['hml_cum_raw'] - x['hml_cum_raw'].iloc[start_index])
+        .assign(smb_cum_adj = lambda x: x['smb_cum_raw'] - x['smb_cum_raw'].iloc[start_index])
+        
+        # Calculate cumulative returns starting from 1
+        .assign(hml_cum = lambda x: np.exp(x['hml_cum_adj']))
+        .assign(smb_cum = lambda x: np.exp(x['smb_cum_adj']))
+    )
+
+    # Set values before 1975-12 to NaN
+    df_aggregated.loc[:start_index, ['hml_cum', 'smb_cum']] = np.nan
+
+    # Set the value for 1975-12 to 1
+    df_aggregated.loc[start_index, ['hml_cum', 'smb_cum']] = 1
+
+
+    return df_aggregated
