@@ -34,7 +34,8 @@ window_vol = 12 # Rolling leverage volatility window
 value_weight = 1 # 1 for value-weighted returns, 0 for equal-weighted returns
 intan_measure = 'epk' # 'kkr' for KKR intangibles, 'epk' for Eisfeldt-Papanikolaou intangibles
 subsample = 'all' # 'all' for all stocks, 'hint' for high IK/A, 'lint' for low IK/A, 'hpd' for high probability of default, 'lpd' for low probability of default
-strat = 'lev' # 'lev' for leverage strategy, 'intan' for intangible strategy
+strat_plot = 'lev' # 'lev' for leverage strategy, 'intan' for intangible strategy
+strat = 'dlev' # 'dlev' for delta leverage strategy, 'hml' or 'smb' for Fama-French factors
 #################################################
 
 # dc.csv_to_pickle() # Run this line to convert the csv files to pickle files
@@ -118,18 +119,18 @@ df_strat_ret = ist.calc_avr_portfolio(df_port_ret_agg_avr)
 
 # df_sp500, fig = ist.plot_returns_mkt(df_strat_ret, sp500, all_stocks)
 
-df_strat, fig = ist.plot_returns(df_strat_ret, double_strat, subsample, strat)
+df_strat, fig = ist.plot_returns(df_strat_ret, double_strat, subsample, strat_plot)
 
 plt.savefig(figfolder + 'cumret.pdf', format='pdf',  bbox_inches='tight')
 
-df_strat, fig = ist.plot_std(df_strat_ret, double_strat, subsample, strat)
+df_strat, fig = ist.plot_std(df_strat_ret, double_strat, subsample, strat_plot)
 
 plt.savefig(figfolder + 'std.pdf', format='pdf',  bbox_inches='tight')
 
 df_sharpe = ist.merge_df_rf(df_strat, rf)
 sharpe_ratio, excess_returns, dates = ist.calculate_annualized_sharpe_ratio(df_sharpe)
 rolling_sharpe_ratio = ist.rolling_sharpe_ratio(excess_returns, window, dates)
-plot_sharpe = ist.plot_sharpe(rolling_sharpe_ratio, double_strat, strat)
+plot_sharpe = ist.plot_sharpe(rolling_sharpe_ratio, double_strat, strat_plot)
 
 
 plt.savefig(figfolder + 'sr.pdf', format='pdf', bbox_inches='tight')

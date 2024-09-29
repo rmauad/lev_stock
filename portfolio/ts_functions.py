@@ -238,6 +238,7 @@ def table_ff_dlev(df, quant_dlev, quant_intan, subsample, filename):
 
      
     # factors = df_subsample[['mkt_rf', 'smb', 'hml', 'rmw', 'cma', 'mom']]
+    df_subsample[quant_dlev_col] = df_subsample[quant_dlev_col].astype('category')
     df_subsample[quant_dlev_col] = df_subsample[quant_dlev_col].cat.add_categories([6])
     
     regression_results_ew = {} #dictionary

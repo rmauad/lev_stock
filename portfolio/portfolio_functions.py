@@ -4,6 +4,7 @@ from tabulate import tabulate
 from linearmodels.panel.model import FamaMacBeth
 from statsmodels.regression.rolling import RollingOLS
 import statsmodels.api as sm
+from statsmodels.iolib.summary2 import summary_col
 import sys
 sys.path.append('code/lev_stock/portfolio/')
 sys.path.append('code/lev_stock/invest_strat/')
@@ -490,9 +491,14 @@ def idl_factor(df, quant_intan, quant_dlev, quant_size, quant_bm):
     ##########################################################################
     # Create a new asset pricing factor (based on intangible/assets and dlev)
     ##########################################################################
-    grouped = df_copy.groupby(['year_month', quant_intan_col, quant_dlev_col, quant_size_col])
+    grouped = df_copy.groupby(['year_month', quant_intan_col, quant_dlev_col, quant_size_col, quant_bm_col])
     # grouped = df_copy.groupby(['year_month', quant_size_col])
-    avg_returns = grouped['ret_lead1'].mean().reset_index()
+    # avg_returns = grouped['ret_lead1'].mean().reset_index()
+    
+    # avg_returns = grouped.apply(lambda x: (x['ret_lead1'] * x['me']).sum() / x['me'].sum()).reset_index()
+    avg_returns = grouped.apply(lambda x: pd.Series({
+    'ret_lead1': (x['RET'] * x['me']).sum() / x['me'].sum() #CHANGED FROM 'ret_lead1' to 'RET'
+    })).reset_index()
     
     # Group by year_month and calculate the averages for each condition    
     monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
@@ -500,8 +506,44 @@ def idl_factor(df, quant_intan, quant_dlev, quant_size, quant_bm):
         'avg_hint_ldl_b': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean(),
         
         'avg_lint_hdl_s': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),
-        'avg_lint_hdl_b': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean()
+        'avg_lint_hdl_b': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean(),
+        
+        'avg_hint_ldl_g': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 1)]['ret_lead1'].mean(),
+        'avg_hint_ldl_n': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 2)]['ret_lead1'].mean(),
+        'avg_hint_ldl_v': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 3)]['ret_lead1'].mean(),
+
+        'avg_lint_hdl_g': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 1)]['ret_lead1'].mean(),
+        'avg_lint_hdl_n': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 2)]['ret_lead1'].mean(),
+        'avg_lint_hdl_v': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 3)]['ret_lead1'].mean()
     }))
+    
+    # monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
+    #     'avg_hint_ldl_s': (x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == 1)]['ret_lead1'] * x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == 1)]['me']).sum() / x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == 1)]['me'].sum(),
+    #     'avg_hint_ldl_b': (x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == quant_size)]['ret_lead1'] * x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == quant_size)]['me']).sum() / x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_size_col] == quant_size)]['me'].sum(),
+        
+    #     'avg_lint_hdl_s': (x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == 1)]['ret_lead1'] * x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == 1)]['me']).sum() / x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == 1)]['me'].sum(),
+    #     'avg_lint_hdl_b': (x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == quant_size)]['ret_lead1'] * x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == quant_size)]['me']).sum() / x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_size_col] == quant_size)]['me'].sum(),
+    
+    #     'avg_hint_ldl_g': (x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 1)]['ret_lead1'] * x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 1)]['me']).sum() / x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 1)]['me'].sum(),
+    #     'avg_hint_ldl_n': (x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 2)]['ret_lead1'] * x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 2)]['me']).sum() / x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 2)]['me'].sum(),
+    #     'avg_hint_ldl_v': (x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 3)]['ret_lead1'] * x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 3)]['me']).sum() / x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 3)]['me'].sum(),
+    
+    #     'avg_lint_hdl_g': (x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 1)]['ret_lead1'] * x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 1)]['me']).sum() / x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 1)]['me'].sum(),
+    #     'avg_lint_hdl_n': (x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 2)]['ret_lead1'] * x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 2)]['me']).sum() / x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 2)]['me'].sum(),
+    #     'avg_lint_hdl_v': (x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 3)]['ret_lead1'] * x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 3)]['me']).sum() / x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 3)]['me'].sum()
+    #     }))
+    
+    # Group by year_month and calculate the averages for each condition    
+    # monthly_avg_returns_bm = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
+    #     'avg_hint_ldl_g': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 1)]['ret_lead1'].mean(),
+    #     'avg_hint_ldl_n': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 2)]['ret_lead1'].mean(),
+    #     'avg_hint_ldl_v': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == 3)]['ret_lead1'].mean(),
+
+    #     'avg_lint_hdl_g': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 1)]['ret_lead1'].mean(),
+    #     'avg_lint_hdl_n': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 2)]['ret_lead1'].mean(),
+    #     'avg_lint_hdl_v': x[(x[quant_intan_col] == 1) & (x[quant_dlev_col] == quant_dlev) & (x[quant_bm_col] == 3)]['ret_lead1'].mean()
+
+    # }))
     
     # monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
     #     'avg_hint_ldl_h': x[(x[quant_intan_col] == quant_intan) & (x[quant_dlev_col] == 1) & (x[quant_bm_col] == quant_bm)]['ret_lead1'].mean(),
@@ -521,19 +563,157 @@ def idl_factor(df, quant_intan, quant_dlev, quant_size, quant_bm):
     # Calculate the difference
     # monthly_avg_returns['difference'] = monthly_avg_returns['small'] - monthly_avg_returns['big']
     monthly_avg_returns['difference'] = ((monthly_avg_returns['avg_hint_ldl_s'] + monthly_avg_returns['avg_hint_ldl_b'])/2) - ((monthly_avg_returns['avg_lint_hdl_s'] + monthly_avg_returns['avg_lint_hdl_b'])/2)
+    
+    monthly_avg_returns['difference_bm'] = ((monthly_avg_returns['avg_hint_ldl_g'] + monthly_avg_returns['avg_hint_ldl_n'] + monthly_avg_returns['avg_hint_ldl_v'])/3) - ((monthly_avg_returns['avg_lint_hdl_g'] + monthly_avg_returns['avg_lint_hdl_n'] + monthly_avg_returns['avg_lint_hdl_v'])/3)
+
     # monthly_avg_returns['difference'] = ((monthly_avg_returns['avg_lint_hdl_h'] + monthly_avg_returns['avg_lint_hdl_m'] + monthly_avg_returns['avg_hint_ldl_l'])/3) - ((monthly_avg_returns['avg_lint_hdl_h'] + monthly_avg_returns['avg_lint_hdl_m'] + monthly_avg_returns['avg_lint_hdl_l'])/3)
 
 
     # Create the final time series
-    time_series = monthly_avg_returns['difference'].reset_index()
-    time_series.columns = ['year_month', 'idl']
+    time_series = monthly_avg_returns[['difference', 'difference_bm']].reset_index()
+    # time_series = monthly_avg_returns_bm['difference'].reset_index()
+    time_series.columns = ['year_month', 'idl_size', 'idl_bm']
     
     df_factor = pd.merge(df_copy, time_series, on='year_month', how='left')
-    df_factor['idl'] = df_factor['idl']*100 # Convert to percentage (and make it consistent with the other factors)    
+    df_factor['idl_size'] = df_factor['idl_size']*100 # Convert to percentage (and make it consistent with the other factors)    
+    df_factor['idl_bm'] = df_factor['idl_bm']*100 # Convert to percentage (and make it consistent with the other factors)    
     
     return df_factor
 
 
+def ff_factor(df, quant_intan, quant_dlev, quant_size, quant_bm):
+    df_copy = df.copy()
+    quant_intan_col = f'intan_at_{quant_intan}'
+    quant_dlev_col = f'dlev_{quant_dlev}'
+    quant_size_col = f'size_{quant_size}'
+    quant_bm_col = f'bm_{quant_bm}'
+    
+    ##########################################################################
+    # Create a new asset pricing factor (based on intangible/assets and dlev)
+    ##########################################################################
+    grouped = df_copy.groupby(['year_month', quant_intan_col, quant_dlev_col, quant_size_col, quant_bm_col])
+    # grouped = df_copy.groupby(['year_month', quant_size_col])
+    # avg_returns = grouped['ret_lead1'].mean().reset_index()
+    
+    # avg_returns = grouped.apply(lambda x: (x['ret_lead1'] * x['me']).sum() / x['me'].sum())
+    avg_returns = grouped.apply(lambda x: pd.Series({
+    'ret_lead1': (x['ret_lead1'] * x['me']).sum() / x['me'].sum()
+    })).reset_index()
+    
+    # Group by year_month and calculate the averages for each condition    
+    monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
+        'avg_h_s': x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),
+        'avg_h_b': x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean(),
+        
+        'avg_l_s': x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),
+        'avg_l_b': x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean(),
+
+        'avg_s_g': x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),
+        'avg_s_n': x[(x[quant_bm_col] == 2) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),  
+        'avg_s_v': x[(x[quant_bm_col] == 3) & (x[quant_size_col] == 1)]['ret_lead1'].mean(),
+        
+        'avg_b_g': x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean(),
+        'avg_b_n': x[(x[quant_bm_col] == 2) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean(),  
+        'avg_b_v': x[(x[quant_bm_col] == 3) & (x[quant_size_col] == quant_size)]['ret_lead1'].mean()        
+    }))
+    
+    # monthly_avg_returns = avg_returns.groupby('year_month').apply(lambda x: pd.Series({
+    #     'avg_h_s': (x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == 1)]['ret_lead1'] * x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == 1)]['me']).sum() / x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == 1)]['me'].sum(),
+    #     'avg_h_b': (x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == quant_size)]['ret_lead1'] * x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == quant_size)]['me']).sum() / x[(x[quant_bm_col] == quant_bm) & (x[quant_size_col] == quant_size)]['me'].sum(),
+    
+    #     'avg_l_s': (x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['ret_lead1'] * x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['me']).sum() / x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['me'].sum(),
+    #     'avg_l_b': (x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['ret_lead1'] * x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['me']).sum() / x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['me'].sum(),
+    
+    #     'avg_s_g': (x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['ret_lead1'] * x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['me']).sum() / x[(x[quant_bm_col] == 1) & (x[quant_size_col] == 1)]['me'].sum(),
+    #     'avg_s_n': (x[(x[quant_bm_col] == 2) & (x[quant_size_col] == 1)]['ret_lead1'] * x[(x[quant_bm_col] == 2) & (x[quant_size_col] == 1)]['me']).sum() / x[(x[quant_bm_col] == 2) & (x[quant_size_col] == 1)]['me'].sum(),
+    #     'avg_s_v': (x[(x[quant_bm_col] == 3) & (x[quant_size_col] == 1)]['ret_lead1'] * x[(x[quant_bm_col] == 3) & (x[quant_size_col] == 1)]['me']).sum() / x[(x[quant_bm_col] == 3) & (x[quant_size_col] == 1)]['me'].sum(),
+    
+    #     'avg_b_g': (x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['ret_lead1'] * x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['me']).sum() / x[(x[quant_bm_col] == 1) & (x[quant_size_col] == quant_size)]['me'].sum(),
+    #     'avg_b_n': (x[(x[quant_bm_col] == 2) & (x[quant_size_col] == quant_size)]['ret_lead1'] * x[(x[quant_bm_col] == 2) & (x[quant_size_col] == quant_size)]['me']).sum() / x[(x[quant_bm_col] == 2) & (x[quant_size_col] == quant_size)]['me'].sum(),
+    #     'avg_b_v': (x[(x[quant_bm_col] == 3) & (x[quant_size_col] == quant_size)]['ret_lead1'] * x[(x[quant_bm_col] == 3) & (x[quant_size_col] == quant_size)]['me']).sum() / x[(x[quant_bm_col] == 3) & (x[quant_size_col] == quant_size)]['me'].sum()
+    #     }))
+    
+    
+    # Calculate the difference
+    # monthly_avg_returns['difference'] = monthly_avg_returns['small'] - monthly_avg_returns['big']
+    monthly_avg_returns['difference'] = ((monthly_avg_returns['avg_h_s'] + monthly_avg_returns['avg_h_b'])/2) - ((monthly_avg_returns['avg_l_s'] + monthly_avg_returns['avg_l_b'])/2)
+    monthly_avg_returns['difference_smb'] = ((monthly_avg_returns['avg_s_g'] + monthly_avg_returns['avg_s_n'] + monthly_avg_returns['avg_s_v'])/3) - ((monthly_avg_returns['avg_b_g'] + monthly_avg_returns['avg_b_n'] + monthly_avg_returns['avg_b_v'])/3)
+
+
+    # Create the final time series
+    # time_series = monthly_avg_returns['difference'].reset_index()
+    time_series = monthly_avg_returns[['difference', 'difference_smb']].reset_index()
+    # time_series = monthly_avg_returns_bm['difference'].reset_index()
+    time_series.columns = ['year_month', 'hml_rep', 'smb_rep']
+    
+    df_factor = pd.merge(df_copy, time_series, on='year_month', how='left')
+    df_factor['hml_rep'] = df_factor['hml_rep']*100 # Convert to percentage (and make it consistent with the other factors)    
+    df_factor['smb_rep'] = df_factor['smb_rep']*100 # Convert to percentage (and make it consistent with the other factors)    
+
+    return df_factor
+
+def spanning_tests(df, filename):
+    df_copy = df.copy()
+        
+    df_agg = (df_copy
+              .groupby('year_month')
+              .agg({
+                  'mkt_rf': 'first',
+                  'hml_rep': 'first',
+                  'hml': 'first',
+                  'smb_rep': 'first',
+                  'smb': 'first',
+                  'mom': 'first',
+                  'cma': 'first',
+                  'rmw': 'first',
+                #   'hml_rep': 'first',
+                  'idl_size': 'first',
+                  'idl_bm': 'first'
+                  })
+              .reset_index()
+              )
+    
+    # df_agg = (df_agg
+    #           .query('year_month <= "2020-02"'))
+    
+    factor_sets = [
+        ['mkt_rf'], #CAPM
+        ['mkt_rf', 'smb',], # 3-factor
+        # ['mkt_rf', 'smb', ], # 4-factor
+        ['mkt_rf', 'smb', 'rmw', 'cma'], # 5-factor
+        ['mkt_rf', 'smb', 'rmw', 'cma', 'mom'] # 5-factor
+    ] #list
+    
+    # dependent_vars = ['idl_size', 'idl_bm']
+    dependent_vars = ['hml']
+
+    results = []
+
+    for dep_var in dependent_vars:
+        for factors in factor_sets:
+            df_agg = df_agg.dropna(subset=factors + [dep_var])
+            X = df_agg[factors]
+            X = sm.add_constant(X)
+            y = df_agg[dep_var]
+            
+            model = sm.OLS(y, X).fit()
+            results.append(model)
+
+    # Create summary table
+    models_summary = summary_col(results, 
+                                 model_names=['CAPM_size', 'FF3_size', 'FF5_size', 'FF6_size',
+                                              'CAPM_bm', 'FF3_bm', 'FF5_bm', 'FF6_bm'],
+                                 stars=True,
+                                 info_dict={'N':lambda x: "{0:d}".format(int(x.nobs)),
+                                            'R2':lambda x: "{:.2f}".format(x.rsquared)})
+
+    # Save to file
+    with open(filename, 'w') as f:
+        f.write(models_summary.as_text())
+
+    return results
+        
+    
 # def time_series_regression(df, firm_id):
 #     # Filter data for a single firm
 #     firm_data = df[df['GVKEY'] == firm_id]
@@ -630,11 +810,13 @@ def idl_factor(df, quant_intan, quant_dlev, quant_size, quant_bm):
     
 #     return summary
 
-def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, window, model_factor, filename):
+def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, window, model_factor, port_ff, filename):
     df_copy = df.copy()
     df_copy.reset_index(inplace=True)
     df_copy['year_month'] = df_copy['year_month'].astype(str)
-    df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m')
+    # df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m-%d')
+    df_copy['year_month'] = pd.to_datetime(df_copy['year_month'], format='%Y-%m-%d')
+
     # df_copy.set_index(['GVKEY', 'year_month'], inplace=True)
     # df_copy = df_copy.set_index(['GVKEY', 'year_month'])
     df_copy['const'] = 1 # Add a constant term    
@@ -643,13 +825,22 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     quant_lev_col = f'lev_{quant_lev}'
     quant_size_col = f'size_{quant_size}'
     quant_bm_col = f'bm_{quant_bm}'
+    quant_lev_col = f'lev_{quant_lev}'
     
     ##########################################
     # Change here to use different portfolios and factors
     ##########################################
     
-    portfolio_cols = ['year_month', quant_size_col, quant_intan_col, quant_dlev_col]
-    factors_list = ['idl', 'mkt_rf', 'hml', 'smb', 'mom', 'cma', 'rmw']
+    portfolio_cols = ['year_month', quant_bm_col, quant_dlev_col, quant_intan_col]
+    # factors_list = ['idl_size', 'mkt_rf', 'hml', 'smb', 'mom', 'cma', 'rmw']
+    # factors_list = ['idl_size', 'mkt_rf', 'hml_rep', 'smb_rep', 'cma', 'rmw']
+    # factors_list = ['idl_bm', 'mkt_rf', 'hml', 'smb', 'mom', 'cma', 'rmw']
+    factors_list = ['mkt_rf', 'hml', 'smb', 'mom', 'cma', 'rmw']
+
+    # factors_list = ['mkt_rf', 'hml', 'smb', 'mom', 'cma', 'rmw']
+    # factors_list = ['mkt_rf', 'hml', 'smb', 'cma', 'rmw']
+    # factors_list = ['mkt_rf', 'hml_rep', 'smb_rep', 'cma', 'rmw']
+
 
     # factors_list = ['mkt_rf', 'hml', 'smb', 'mom']
     
@@ -661,7 +852,8 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     
     df_copy = (df_copy
                .assign(ret_lead1_rf = df_copy['ret_lead1'] - (df_copy['rf']/100),
-                       ret_lead2_rf = df_copy['ret_lead2'] - (df_copy['rf']/100))
+                       ret_lead2_rf = df_copy['ret_lead2'] - (df_copy['rf']/100),
+                       ret_rf = df_copy['RET'] - (df_copy['rf']/100))
     )
     
     factors = df_copy[['year_month', 'const'] + factors_list].drop_duplicates()
@@ -669,7 +861,8 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     ######################################################################################
     # Creating the portfolio returns (3 intan x 5 dlev x 4 lev = 60 portfolios per period)
     ######################################################################################
-    port_returns = df_copy.groupby(portfolio_cols)[['ret_lead1_rf', 'ret_lead2_rf']].mean().reset_index()
+    # port_returns = df_copy.groupby(portfolio_cols)[['ret_lead1_rf', 'ret_lead2_rf']].mean().reset_index()
+    port_returns = df_copy.groupby(portfolio_cols)[['ret_rf', 'ret_lead2_rf']].mean().reset_index()
     # port_returns = df_copy.groupby(['year_month', quant_size_col])[['ret_lead1_rf', 'ret_lead2_rf']].mean().reset_index()
 
     #####################################
@@ -678,6 +871,7 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     
     # port_ff = (port_ff
     #            .assign(ret_lead1_rf = port_ff.groupby('port_id')['ret'].shift(-1))
+    #         #    .rename(columns={'ret': 'ret_lead1_rf'})
     #            )
     
     # df_port = port_ff.merge(factors, on=['year_month'], how='left')
@@ -701,11 +895,14 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     # df_port['port_id'] = df_port[quant_size_col].astype(str)
     df_port['port_id'] = df_port['port_id'].astype('Int64')
     
+    
     #####################################
     #####################################
     
     df_betas = create_factor_betas(df_port, factors_list, window) # this creates the factor betas for each portfolio
-    df_returns = df_port[['port_id', 'year_month', 'ret_lead1_rf']]
+    # df_returns = df_port[['port_id', 'year_month', 'ret_lead1_rf']]
+    df_returns = df_port[['port_id', 'year_month', 'ret_rf']]
+
 
     # df_returns = df_port[['port_id', 'year_month', 'ret_lead1', 'ret_lead2']]
     df_fm = df_returns.merge(df_betas, on=['port_id', 'year_month'], how='inner')
@@ -716,22 +913,24 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     
     df_fm.set_index(['port_id', 'year_month'], inplace=True)
 
-    dep_vars = ['ret_lead1_rf']
+    # dep_vars = ['ret_lead1_rf']
+    dep_vars = ['ret_rf']
+
 
     if model_factor == 'capm':
-        indep_vars = ['beta_idl', 'beta_mkt', 'const'] # CAPM
-        # indep_vars = ['beta_mkt', 'const'] # CAPM
+        # indep_vars = ['beta_idl', 'beta_mkt', 'const'] # CAPM
+        indep_vars = ['beta_mkt', 'const'] # CAPM
     elif model_factor == 'ff3':
-        indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 3-factor
-        # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 3-factor
-    elif model_factor == 'carhart4':
-        indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'beta_mom', 'const'] # Cahart 4-factor
-        # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'beta_mom', 'const'] # Cahart 4-factor
+        # indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 3-factor
+        indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 3-factor
     elif model_factor == 'ff5':
-        indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'beta_cma', 'beta_rmw', 'const'] # Fama-French 5-factor
-        # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'beta_cma', 'beta_rmw', 'const'] # Fama-French 5-factor
+        # indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb', 'beta_cma', 'beta_rmw', 'const'] # Fama-French 5-factor
+        indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'beta_cma', 'beta_rmw', 'const'] # Fama-French 5-factor
+    elif model_factor == 'ff6':
+        # indep_vars = ['beta_idl', 'beta_mkt', 'beta_hml', 'beta_smb',  'beta_cma', 'beta_rmw', 'beta_mom', 'const'] # Fama-French 6-factor
+        indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb',  'beta_cma', 'beta_rmw', 'beta_mom', 'const'] # Fama-French 6-factor
     else:
-        raise ValueError(f"Invalid model_factor: {model_factor}. Please choose from 'capm', 'ff3', 'carhart4', or 'ff5'.")
+        raise ValueError(f"Invalid model_factor: {model_factor}. Please choose from 'capm', 'ff3', 'ff5', or 'ff6'.")
 
     # indep_vars = ['beta_mkt', 'beta_hml', 'beta_smb', 'const'] # Fama-French 5-factor
 
@@ -752,7 +951,7 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
         'beta_smb': 'SMB',
         'beta_cma': 'CMA',
         'beta_rmw': 'RMW',
-        'beta_mom': 'MOM',
+        'beta_mom': 'UMD',
         'const': 'Intercept'
     }
 
@@ -763,7 +962,8 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     
     for dep_var in dep_vars:
         df_clean_no_na = df_fm.dropna(subset=[dep_var] + indep_vars)
-        dep = df_clean_no_na[dep_var] * 100
+        # dep = df_clean_no_na[dep_var] * 100
+        dep = df_clean_no_na[dep_var]
         indep = df_clean_no_na[indep_vars]
         indep = indep.astype(float)
         mod = FamaMacBeth(dep, indep)
@@ -802,18 +1002,37 @@ def reg_factor(df, quant_intan, quant_dlev, quant_lev, quant_size, quant_bm, win
     ]
 
     # Generate LaTeX table with custom header
+#     custom_header = r"""
+# \begin{table}[h!]
+# \centering
+# \renewcommand{\arraystretch}{1.5} % Increase row height
+# \begin{tabular}{lllll}
+# \hline
+# % Independent variables 
+# % & \multicolumn{2}{c}{Stock return (\%)} \\
+# % \cline{2-3}
+#             & CAPM+
+#              & FF3+              
+#              & FF5+     & FF6+ \\
+# \hline
+# """
     custom_header = r"""
 \begin{table}[h!]
 \centering
 \renewcommand{\arraystretch}{1.5} % Increase row height
-\begin{tabular}{lllll}
+\begin{tabular}{lllllllll}
 \hline
-% Independent variables 
-% & \multicolumn{2}{c}{Stock return (\%)} \\
-% \cline{2-3}
-            & CAPM+
-             & FF3+           & Carhart4+    
-             & FF5+ \\
+% Independent variables
+% & \multicolumn{8}{c}{Stock return (\%)} \\
+% \cline{2-9}
+ & CAPM
+ & CAPM+
+ & FF3
+ & FF3+
+ & FF5
+ & FF5+
+ & FF6
+ & FF6+ \\
 \hline
 """
 
@@ -869,7 +1088,10 @@ def create_factor_betas(df, factors_list, window):
         
         # Prepare the data for rolling regression
         X = port_data[factors_list]
-        y = port_data['ret_lead1_rf'] * 100  # Convert to percentage
+        # y = port_data['ret_lead1_rf'] * 100  # Convert to percentage
+        # y = port_data['ret_lead1_rf']  # Convert to percentage
+        y = port_data['ret_rf']  # Convert to percentage
+
         
         # Perform rolling regression
         model = RollingOLS(y, sm.add_constant(X), window=window)
@@ -886,10 +1108,13 @@ def create_factor_betas(df, factors_list, window):
         # Rename columns for clarity
         betas = (betas
                  .rename(columns={#'const': 'beta_const', 
-                                      'idl': 'beta_idl', 
+                                    #   'idl_size': 'beta_idl',
+                                      'idl_bm': 'beta_idl', 
                                       'mkt_rf': 'beta_mkt', 
                                       'hml': 'beta_hml', 
                                       'smb': 'beta_smb',
+                                    #   'hml_rep': 'beta_hml',
+                                    #   'smb_rep': 'beta_smb',
                                       'cma': 'beta_cma',
                                       'rmw': 'beta_rmw',
                                       'mom': 'beta_mom'

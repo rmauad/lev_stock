@@ -49,6 +49,8 @@ def load_fm(redo = False, origin = "pickle"):
             ff = pd.read_csv('../data/csv/F-F_Research_Data_Factors.CSV') # from Kenneth French's website
             print("Reading Peters and Taylor intangible capital data")
             pt = pd.read_csv('../data/csv/peterstaylor.csv')
+            print("Reading Fama-French momentum factor")
+            mom = pd.read_csv('../data/csv/F-F_Momentum_Factor.CSV') # from Kenneth French's website
         elif origin == 'pickle' or origin == 'pkl':
             print("Reading from pickle files")
             print("Reading intangible capital data")
@@ -60,7 +62,7 @@ def load_fm(redo = False, origin = "pickle"):
             print("Reading Fama-French factors")
             # ff = pd.read_pickle('../data/pickle/F-F_Research_Data_Factors.pkl')
             ff = pd.read_pickle('../data/pickle/F-F_Research_Data_5_Factors_2x3.pkl')
-            mom = pd.read_pickle('../data/pickle/F-F_Research_Data_Factors.pkl')
+            mom = pd.read_pickle('../data/pickle/F-F_Momentum_Factor.pkl')
             print("Reading Peters and Taylor intangible capital data")
             pt = pd.read_pickle('../data/pickle/peterstaylor.pkl')
             print("Reading knowledge capital risk data")
@@ -77,18 +79,59 @@ def load_fm(redo = False, origin = "pickle"):
         df_fm = compute_default_probabilities(df_fm, progress_interval=1000)
         # df_fm.set_index(['GVKEY', 'year_month'], inplace=True)
         
-        df_fm.to_feather('../data/feather/df_fm.feather')
+        # df_fm.to_feather('../data/feather/df_fm.feather')
+        df_fm.to_feather('../data/feather/df_fm_rdq.feather')
     else:
-        df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
+        # df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
+        df_fm = pd.read_feather('../data/feather/df_fm_rdq.feather') #from prep_fm.py (folder porfolio)
+        mom = pd.read_pickle('../data/pickle/F-F_Momentum_Factor.pkl')
         
-        # # port_ff25 = pd.read_pickle("../data/pickle/25_Portfolios_5x5.pkl")
+        mom = (mom
+               .assign(year_month = pd.to_datetime(mom['date'], format='%Y%m'))
+               .rename(columns = {'Mom': 'mom'})
+            #    .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+               .drop(columns = ['date'])
+        )
+        
+        df_fm = pd.merge(df_fm, mom, how = 'left', on = 'year_month')
+        
+        # port_ff25 = pd.read_csv("../data/csv/25_Portfolios_5x5.csv")
+        # port_ff25.to_pickle("../data/pickle/25_Portfolios_5x5.pkl")
+        
+        port_ff25 = pd.read_pickle("../data/pickle/25_Portfolios_5x5.pkl")
         # port_ff6 = pd.read_pickle("../data/pickle/6_Portfolios_2x3.pkl")
 
-        # # # port_ff25 = (port_ff25
-        # # #              .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
-        # # #              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-        # # #              .drop(columns = ['date'])
-        # # # )
+        # port_ff25 = (port_ff25
+        #              .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
+        #              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+        #              .drop(columns = ['date'])
+        # )
+        
+        ##################
+        # FF 25 portfolios
+        ##################
+        
+        port_ff25 = (port_ff25
+                    .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
+                    .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+                    .assign(year_month = lambda x: x['year_month'].dt.to_timestamp())
+                    .drop(columns = ['date'])
+        )
+    
+        # Pivot this by melting the dataframe
+        port_ff25_pivot = (port_ff25
+                          .melt(id_vars = ['year_month'], var_name = 'port', value_name = 'ret')
+                          .assign(port = lambda x: x['port'].str.replace(' ', ''))
+        )
+        
+        # Replace string identifiers with numbers from 1 to 25
+        port_ff25_pivot['port_id'] = pd.factorize(port_ff25_pivot['port'])[0] + 1
+        port_ff25_pivot = port_ff25_pivot.drop(columns = ['port'])
+        
+                
+        ##################
+        # FF 6 portfolios
+        ##################
         
         # port_ff6 = (port_ff6
         #             .assign(date = pd.to_datetime(port_ff6['date'], format='%Y%m'))
@@ -107,7 +150,7 @@ def load_fm(redo = False, origin = "pickle"):
         # port_ff6_pivot['port_id'] = pd.factorize(port_ff6_pivot['port'])[0] + 1
         # port_ff6_pivot = port_ff6_pivot.drop(columns = ['port'])
         
-    return df_fm
+    return df_fm, port_ff25_pivot
 
 @announce_execution
 def merge_comp_intan_epk(df, intan):
@@ -160,7 +203,7 @@ def merge_comp_intan_epk(df, intan):
 
     compust_pre_merge = (compust
         .assign(rdq = pd.to_datetime(compust["rdq"], format = '%Y-%m-%d', errors = "coerce")) #non-conforming entries will be coerced to "Not a Time - NaT"
-        .assign(year_month = lambda x: x['date'].dt.to_period('M')) #merging according to the fiscal quarter end, instead of the release date
+        .assign(year_month = lambda x: x['rdq'].dt.to_period('M')) #merging according to the fiscal quarter end, instead of the release date
         .assign(lev = lambda x: x['ltq'] / x['atq'])
         .sort_values(by = ['GVKEY', 'date'])
         .assign(dlev = lambda x: x.groupby('GVKEY')['lev'].diff())

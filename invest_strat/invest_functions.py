@@ -68,9 +68,9 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd
         'dlev': (quant_dlev, f'dlev_{quant_dlev}'),
         'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
         'lev': (quant_lev, f'lev_{quant_lev}'),
-        'default_probability': (quant_pd, f'pd_{quant_pd}'),
+        # 'default_probability': (quant_pd, f'pd_{quant_pd}'),
         # 'me': (quant_size, f'size_{quant_size}'),
-        'bm': (quant_bm, f'bm_{quant_bm}')
+        # 'bm': (quant_bm, f'bm_{quant_bm}')
         # 'KKR': (quant_kkr, f'kkr_{quant_kkr}')
         }
     
@@ -118,17 +118,68 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd
     # df_copy['size_2'] = df_copy.groupby('year_month')['me'].transform(
     #     lambda x: pd.qcut(x, 2, labels=range(1, 3)) if len(x) >= 2 else pd.Series([None]*len(x))
     #     )
+    # Create size_2 portfolios
     
     nyse_median_dict = df_copy_filtered.groupby('year_month')['nyse_median'].first().to_dict()
     df_copy['nyse_median'] = df_copy['year_month'].map(nyse_median_dict)
 
     # df_copy = df_copy.merge(df_copy_filtered[['year_month', 'nyse_median']], on=['year_month'], how='left')
 
-    df_copy['size_2'] = df_copy.groupby('year_month').apply(
-        lambda x: (x['me'] > x['nyse_median']).astype(int) + 1 if len(x) >= 2 else pd.Series([None]*len(x))
-        ).reset_index(level=0, drop=True)
+    # df_copy['size_2'] = df_copy.groupby('year_month').apply(
+    #     lambda x: (x['me'] > x['nyse_median']).astype(int) + 1 if len(x) >= 2 else pd.Series([None]*len(x))
+    #     ).reset_index(level=0, drop=True)
 
+    df_copy['size_2'] = df_copy.groupby('year_month').apply(
+        lambda x: pd.Series((x['me'] > x['nyse_median']).astype(int) + 1 if len(x) >= 2 else [None]*len(x), index=x.index)
+    ).reset_index(level=0, drop=True)
+
+    # df_copy['bm_3'] = df_copy.groupby('year_month').apply(
+    #     lambda x: (x['me'] > x['nyse_median']).astype(int) + 1 if len(x) >= 2 else pd.Series([None]*len(x))
+    #     ).reset_index(level=0, drop=True)
+    
+    # Calculate NYSE 30th and 70th percentiles for book-to-market ratio
+    nyse_bm_breakpoints = df_copy_filtered.groupby('year_month')['bm'].quantile([0.3, 0.7]).unstack()
+    nyse_bm_breakpoints_dict = nyse_bm_breakpoints.to_dict()
+
+    # Create bm_3 portfolios
+    # def assign_bm_3(year_month, bm_series):
+    #     if len(bm_series) < 3:
+    #         return pd.Series([None] * len(bm_series))
         
+    #     low = nyse_bm_breakpoints_dict[0.3][year_month]
+    #     high = nyse_bm_breakpoints_dict[0.7][year_month]
+        
+    #     epsilon = 1e-10
+        
+    #     return pd.cut(bm_series, 
+    #                 bins=[-np.inf, low - epsilon, high + epsilon, np.inf], 
+    #                 labels=[1, 2, 3])
+
+    # df_copy['bm_3'] = df_copy.groupby('year_month').apply(
+    #     lambda x: assign_bm_3(x.name, x['bm'])
+    # ).reset_index(level=0, drop=True)
+
+    def assign_bm_3(year_month, group):
+        if len(group) < 3:
+            return pd.Series([pd.NA] * len(group), index=group.index)
+        
+        bm_series = group['bm']
+        low = nyse_bm_breakpoints_dict[0.3][year_month]
+        high = nyse_bm_breakpoints_dict[0.7][year_month]
+        epsilon = 1e-10
+        
+        result = pd.cut(bm_series,
+                        bins=[-np.inf, low - epsilon, high + epsilon, np.inf],
+                        labels=[1, 2, 3])
+        
+        return pd.Series(result, index=group.index)
+
+    # Apply the function
+    df_copy['bm_3'] = df_copy.groupby('year_month').apply(
+        lambda x: assign_bm_3(x.name, x)
+    ).reset_index(level=0, drop=True)
+
+
     # for column, (quant_count, quant_name) in quantile_info.items():
     #     df_copy[quant_name] = df_copy.groupby('year_month')[column].transform(
     #         lambda x: pd.qcut(x, quant_count, labels=range(1, quant_count + 1))

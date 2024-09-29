@@ -12,7 +12,7 @@ import utils as ut
 
 # df = dc.load_fm(redo = False)
 df, port_ff6_pivot = dc.load_fm(redo = False)
-df.set_index(['GVKEY', 'year_month'], inplace=True)
+# df.set_index(['GVKEY', 'year_month'], inplace=True)
 
 #######################################
 quant_dlev = 5
