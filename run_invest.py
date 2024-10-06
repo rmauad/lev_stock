@@ -33,7 +33,7 @@ window = 60 # Rolling Sharpe ratio window
 window_vol = 12 # Rolling leverage volatility window
 value_weight = 1 # 1 for value-weighted returns, 0 for equal-weighted returns
 intan_measure = 'epk' # 'kkr' for KKR intangibles, 'epk' for Eisfeldt-Papanikolaou intangibles
-subsample = 'all' # 'all' for all stocks, 'hint' for high IK/A, 'lint' for low IK/A, 'hpd' for high probability of default, 'lpd' for low probability of default
+subsample = 'hint' # 'all' for all stocks, 'hint' for high IK/A, 'lint' for low IK/A, 'hpd' for high probability of default, 'lpd' for low probability of default
 strat_plot = 'lev' # 'lev' for leverage strategy, 'intan' for intangible strategy
 strat = 'dlev' # 'dlev' for delta leverage strategy, 'hml' or 'smb' for Fama-French factors
 #################################################

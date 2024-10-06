@@ -222,8 +222,10 @@ def table_ff_dlev(df, quant_dlev, quant_intan, subsample, filename):
     factor_sets = [
         ['mkt_rf'], #CAPM
         ['mkt_rf', 'smb', 'hml'], # 3-factor
-        ['mkt_rf', 'smb', 'hml', 'mom'], # 4-factor
-        ['mkt_rf', 'smb', 'hml', 'rmw', 'cma'] # 5-factor
+        # ['mkt_rf', 'smb', 'hml', 'mom'], # 4-factor
+        ['mkt_rf', 'smb', 'hml', 'rmw', 'cma'], # 5-factor
+        ['mkt_rf', 'smb', 'hml', 'rmw', 'cma', 'mom'] # 4-factor
+
     ] #list
     
     factors = df_subsample.groupby(['year_month', quant_dlev_col])[['mkt_rf', 'smb', 'hml', 'rmw', 'cma', 'mom']].first()
@@ -275,7 +277,7 @@ def table_ff_dlev(df, quant_dlev, quant_intan, subsample, filename):
     return regression_results_ew
 
 def create_latex_table(portfolio_results_ew, portfolio_results_vw, portfolio_name, filename):
-    models = ['CAPM', '3-factor', '4-factor', '5-factor']
+    models = ['CAPM', '3-factor', '5-factor', '6-factor']
     quantiles = sorted(portfolio_results_ew.keys())
 
     def format_coefficient(coef, se, conf_int, pval):

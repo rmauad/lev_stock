@@ -82,51 +82,59 @@ def load_fm(redo = False, origin = "pickle"):
         # df_fm.to_feather('../data/feather/df_fm.feather')
         df_fm.to_feather('../data/feather/df_fm_rdq.feather')
     else:
-        # df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
-        df_fm = pd.read_feather('../data/feather/df_fm_rdq.feather') #from prep_fm.py (folder porfolio)
-        mom = pd.read_pickle('../data/pickle/F-F_Momentum_Factor.pkl')
+        df_fm = pd.read_feather('../data/feather/df_fm.feather') #from prep_fm.py (folder porfolio)
         
-        mom = (mom
-               .assign(year_month = pd.to_datetime(mom['date'], format='%Y%m'))
-               .rename(columns = {'Mom': 'mom'})
-            #    .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-               .drop(columns = ['date'])
-        )
+        ###################################################################
+        # Uncomment this block to use the dataframe merged by release date
+        ###################################################################
         
-        df_fm = pd.merge(df_fm, mom, how = 'left', on = 'year_month')
+        # df_fm = pd.read_feather('../data/feather/df_fm_rdq.feather') #from prep_fm.py (folder porfolio)
+        # mom = pd.read_pickle('../data/pickle/F-F_Momentum_Factor.pkl')
         
-        # port_ff25 = pd.read_csv("../data/csv/25_Portfolios_5x5.csv")
-        # port_ff25.to_pickle("../data/pickle/25_Portfolios_5x5.pkl")
-        
-        port_ff25 = pd.read_pickle("../data/pickle/25_Portfolios_5x5.pkl")
-        # port_ff6 = pd.read_pickle("../data/pickle/6_Portfolios_2x3.pkl")
-
-        # port_ff25 = (port_ff25
-        #              .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
-        #              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-        #              .drop(columns = ['date'])
+        # mom = (mom
+        #        .assign(year_month = pd.to_datetime(mom['date'], format='%Y%m'))
+        #        .rename(columns = {'Mom': 'mom'})
+        #     #    .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+        #        .drop(columns = ['date'])
         # )
         
-        ##################
-        # FF 25 portfolios
-        ##################
+        # df_fm = pd.merge(df_fm, mom, how = 'left', on = 'year_month')
         
-        port_ff25 = (port_ff25
-                    .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
-                    .assign(year_month = lambda x: x['date'].dt.to_period('M'))
-                    .assign(year_month = lambda x: x['year_month'].dt.to_timestamp())
-                    .drop(columns = ['date'])
-        )
+        ####################################################################
+        ####################################################################
+        
+        # # port_ff25 = pd.read_csv("../data/csv/25_Portfolios_5x5.csv")
+        # # port_ff25.to_pickle("../data/pickle/25_Portfolios_5x5.pkl")
+        
+        # port_ff25 = pd.read_pickle("../data/pickle/25_Portfolios_5x5.pkl")
+        # # port_ff6 = pd.read_pickle("../data/pickle/6_Portfolios_2x3.pkl")
+
+        # # port_ff25 = (port_ff25
+        # #              .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
+        # #              .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+        # #              .drop(columns = ['date'])
+        # # )
+        
+        # ##################
+        # # FF 25 portfolios
+        # ##################
+        
+        # port_ff25 = (port_ff25
+        #             .assign(date = pd.to_datetime(port_ff25['date'], format='%Y%m'))
+        #             .assign(year_month = lambda x: x['date'].dt.to_period('M'))
+        #             .assign(year_month = lambda x: x['year_month'].dt.to_timestamp())
+        #             .drop(columns = ['date'])
+        # )
     
-        # Pivot this by melting the dataframe
-        port_ff25_pivot = (port_ff25
-                          .melt(id_vars = ['year_month'], var_name = 'port', value_name = 'ret')
-                          .assign(port = lambda x: x['port'].str.replace(' ', ''))
-        )
+        # # Pivot this by melting the dataframe
+        # port_ff25_pivot = (port_ff25
+        #                   .melt(id_vars = ['year_month'], var_name = 'port', value_name = 'ret')
+        #                   .assign(port = lambda x: x['port'].str.replace(' ', ''))
+        # )
         
-        # Replace string identifiers with numbers from 1 to 25
-        port_ff25_pivot['port_id'] = pd.factorize(port_ff25_pivot['port'])[0] + 1
-        port_ff25_pivot = port_ff25_pivot.drop(columns = ['port'])
+        # # Replace string identifiers with numbers from 1 to 25
+        # port_ff25_pivot['port_id'] = pd.factorize(port_ff25_pivot['port'])[0] + 1
+        # port_ff25_pivot = port_ff25_pivot.drop(columns = ['port'])
         
                 
         ##################
@@ -150,7 +158,7 @@ def load_fm(redo = False, origin = "pickle"):
         # port_ff6_pivot['port_id'] = pd.factorize(port_ff6_pivot['port'])[0] + 1
         # port_ff6_pivot = port_ff6_pivot.drop(columns = ['port'])
         
-    return df_fm, port_ff25_pivot
+    return df_fm #, port_ff25_pivot
 
 @announce_execution
 def merge_comp_intan_epk(df, intan):

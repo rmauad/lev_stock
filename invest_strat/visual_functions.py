@@ -335,6 +335,7 @@ def plot_returns(df, double_strat, subsample, strat):
         ax.set_ylabel('Log cumulative return')
         ax.set_xlabel('Period')
         ax.grid(True)
+        ax.set_ylim(bottom=-1, top=4.5)
 
 
     # if strat == 'lev':
@@ -413,6 +414,7 @@ def plot_std(df, double_strat, subsample, strat):
         ax.set_ylabel('Annualized 12-month std deviation')
         ax.set_xlabel('Period')
         ax.grid(True)
+        ax.set_ylim(bottom=0, top=0.6)
         
 
     # if strat == 'lev':
@@ -487,7 +489,7 @@ def plot_sharpe(rolling_sharpe_ratio, double_strat, strat):
         ax.set_ylabel('5-year rolling window SR')
         ax.set_xlabel('Period')
         ax.grid()
-        
+        ax.set_ylim(bottom=-1.5, top=1.8)
 
         ax.legend(['High leverage level', 'Low leverage level'],
                 loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)

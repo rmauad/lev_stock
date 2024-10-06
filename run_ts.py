@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import utils as ut
 # import portfolio_functions as pf
 
-# df = dc.load_fm(redo = False)
-df, port_ff6_pivot = dc.load_fm(redo = False)
+df = dc.load_fm(redo = False)
+# df, port_ff6_pivot = dc.load_fm(redo = False)
 # df.set_index(['GVKEY', 'year_month'], inplace=True)
 
 #######################################
@@ -25,7 +25,7 @@ quant_bm = 3
 # intan_subsample = 1 # 1 for low intangibles, quant_intan for high.
 quant_lev_vol = 0
 window_vol = 12
-subsample = 'all' # 'all' for all firms, 'hint' for high intangibles, 'lint' for low intangibles.
+subsample = 'lint' # 'all' for all firms, 'hint' for high intangibles, 'lint' for low intangibles.
 #######################################
 
 df_quantiles = ist.create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd, quant_size, quant_bm, quant_lev_vol, window_vol)

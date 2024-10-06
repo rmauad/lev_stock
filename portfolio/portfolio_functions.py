@@ -1859,6 +1859,7 @@ change portfolio & 1 (Lowest) & 2 & 3 & 4 (Highest) & 1 (Lowest) & 2 & 3 & 4 (Hi
 
         monthly_weighted_avg_returns = filtered_grouped.apply(lambda x: (x[col] * x['me']).sum() / x['me'].sum()).reset_index(name=f'weighted_{col}')
         
+        
         overall_avg_returns = monthly_avg_returns.groupby([quant_lev_col, quant_dlev_col])[col].mean().reset_index()
 
         overall_weighted_avg_returns = monthly_weighted_avg_returns.groupby([quant_lev_col, quant_dlev_col])[f'weighted_{col}'].mean().reset_index()

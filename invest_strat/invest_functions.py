@@ -68,7 +68,7 @@ def create_quantiles(df, quant_dlev, quant_intan, quant_lev, quant_kkr, quant_pd
         'dlev': (quant_dlev, f'dlev_{quant_dlev}'),
         'intan_epk_at': (quant_intan, f'intan_at_{quant_intan}'),
         'lev': (quant_lev, f'lev_{quant_lev}'),
-        # 'default_probability': (quant_pd, f'pd_{quant_pd}'),
+        'default_probability': (quant_pd, f'pd_{quant_pd}'),
         # 'me': (quant_size, f'size_{quant_size}'),
         # 'bm': (quant_bm, f'bm_{quant_bm}')
         # 'KKR': (quant_kkr, f'kkr_{quant_kkr}')
